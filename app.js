@@ -696,11 +696,19 @@ function renderTable() {
   const wrap = document.getElementById('tableWrap');
   const empty = document.getElementById('resultsWrap');
 
+  const query = document.getElementById('searchInput').value.toLowerCase().trim();
+  const filtered = query
+    ? state.contracts.filter(c =>
+        c.fileName.toLowerCase().includes(query) ||
+        Object.values(c.fields).some(v => String(v).toLowerCase().includes(query))
+      )
+    : state.contracts;
+
   const visible = [...state.visibleFields].filter(f =>
-    state.contracts.some(c => c.fields[f])
+    filtered.some(c => c.fields[f])
   );
 
-  if (state.contracts.length === 0 || visible.length === 0) {
+  if (filtered.length === 0 || visible.length === 0) {
     empty.classList.remove('d-none');
     wrap.classList.add('d-none');
     document.getElementById('exportBtn').disabled = true;
@@ -716,7 +724,7 @@ function renderTable() {
     visible.map(f => `<th>${f}</th>`).join('') + '<th></th></tr>';
 
   // Body
-  body.innerHTML = state.contracts.map((c, i) => {
+  body.innerHTML = filtered.map((c, i) => {
     const catOptions = CATEGORIES.map(([val, label]) =>
       `<option value="${val}"${c.category === val ? ' selected' : ''}>${label}</option>`
     ).join('');
@@ -978,6 +986,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       state.currentPage--;
     }
   });
+
+  document.getElementById('searchInput').addEventListener('input', renderTable);
 });
 
 // ===================== FILE HANDLING =====================
