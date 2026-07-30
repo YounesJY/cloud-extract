@@ -1,5 +1,6 @@
 // ===================== CONFIGURATION =====================
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const FIELD_NAMES = [
   'Police Num', 'Souscripteur', 'Adresse',
   "Date d'effet", "Date d'échéance", 'Téléphone',
@@ -26,6 +27,90 @@ let state = {
 
 // ===================== STORAGE (localStorage — no CDN needed) =====================
 const STORAGE_KEY = 'cloud_extract_data';
+
+// ===================== INDEXEDDB (persistent PDF cache) =====================
+const DB_NAME = 'cloud_extract_cache';
+const DB_VERSION = 1;
+const STORE_NAME = 'pdfs';
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function savePdfToCache(fileName, data) {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(data, fileName);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  } catch (e) {
+    console.warn('IndexedDB save failed:', e);
+  }
+}
+
+async function loadAllPdfCache() {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).openCursor();
+      const cache = {};
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (cursor) {
+          cache[cursor.key] = cursor.value;
+          cursor.continue();
+        }
+      };
+      tx.oncomplete = () => { db.close(); resolve(cache); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  } catch (e) {
+    console.warn('IndexedDB load failed:', e);
+    return {};
+  }
+}
+
+async function deletePdfFromCache(fileName) {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(fileName);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  } catch (e) {
+    console.warn('IndexedDB delete failed:', e);
+  }
+}
+
+async function clearPdfCacheDb() {
+  try {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).clear();
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  } catch (e) {
+    console.warn('IndexedDB clear failed:', e);
+  }
+}
 
 function loadFromStorage() {
   try {
@@ -578,7 +663,7 @@ function renderTable() {
 
   // Header
   head.innerHTML = '<tr><th>#</th><th>File</th><th>Method</th>' +
-    visible.map(f => `<th>${f}</th>`).join('') + '</tr>';
+    visible.map(f => `<th>${f}</th>`).join('') + '<th></th></tr>';
 
   // Body
   body.innerHTML = state.contracts.map((c, i) => {
@@ -588,8 +673,25 @@ function renderTable() {
       <td class="text-nowrap"><small>${c.fileName}</small></td>
       <td><span class="badge bg-${c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c.method}</span></td>
       <td>${fields}</td>
+      <td><button class="btn btn-sm btn-outline-danger border-0 delete-btn" data-file="${c.fileName}" title="Remove"><i class="bi bi-x-lg"></i></button></td>
     </tr>`;
   }).join('');
+
+  // Event delegation for delete buttons
+  body._listener = body._listener || (body.addEventListener('click', async e => {
+    const btn = e.target.closest('.delete-btn');
+    if (!btn) return;
+    const fileName = btn.dataset.file;
+    if (!confirm(`Remove "${fileName}"?`)) return;
+    state.contracts = state.contracts.filter(c => c.fileName !== fileName);
+    delete state.pdfCache[fileName];
+    await deletePdfFromCache(fileName);
+    saveToStorage();
+    renderTable();
+    updatePdfSelector();
+    document.getElementById('extractBtn').disabled = state.contracts.length === 0;
+    showStatus(`Removed "${fileName}".`, 'info');
+  }), true);
 }
 
 // ===================== EVENT HANDLERS =====================
@@ -600,6 +702,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!pdfjsAvailable) {
     showStatus('pdf.js failed to load. Check internet or reload. Extraction & preview disabled.', 'danger');
   }
+
+  state.pdfCache = await loadAllPdfCache();
 
   if (state.contracts.length > 0) {
     renderTable();
@@ -650,9 +754,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const files = e.dataTransfer.files;
     for (const file of files) {
       if (!file.name.toLowerCase().endsWith('.pdf')) continue;
+      if (file.size > MAX_FILE_SIZE) { console.warn('File too large:', file.name, file.size); continue; }
       try {
         const bytes = await file.arrayBuffer();
-        state.pdfCache[file.name] = new Uint8Array(bytes);
+        const data = new Uint8Array(bytes);
+        state.pdfCache[file.name] = data;
+        await savePdfToCache(file.name, data);
       } catch (err) {
         console.error('File read failed:', file.name, err);
       }
@@ -685,10 +792,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
   });
 
-  document.getElementById('clearBtn').addEventListener('click', () => {
+  document.getElementById('clearBtn').addEventListener('click', async () => {
     if (!confirm('Clear all extracted data? This cannot be undone.')) return;
     state.contracts = [];
     state.pdfCache = {};
+    await clearPdfCacheDb();
     saveToStorage();
     renderTable();
     updatePdfSelector();
@@ -816,8 +924,11 @@ document.getElementById('fileInput').addEventListener('change', async e => {
   const files = e.target.files;
   for (const file of files) {
     if (!file.name.toLowerCase().endsWith('.pdf')) continue;
+    if (file.size > MAX_FILE_SIZE) { console.warn('File too large:', file.name, file.size); continue; }
     const bytes = await file.arrayBuffer();
-    state.pdfCache[file.name] = new Uint8Array(bytes);
+    const data = new Uint8Array(bytes);
+    state.pdfCache[file.name] = data;
+    await savePdfToCache(file.name, data);
   }
   handleFiles(files);
 });
