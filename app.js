@@ -724,9 +724,9 @@ function renderTable() {
       <td><select class="form-select form-select-sm cat-select" data-file="${c.fileName}" style="min-width:160px">${catOptions}</select></td>
       <td><span class="badge bg-${c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c.method}</span></td>
       <td>${fields}</td>
-      <td class="text-nowrap">
-        <button class="btn btn-sm btn-outline-secondary border-0 reextract-btn" data-file="${c.fileName}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>
-        <button class="btn btn-sm btn-outline-danger border-0 delete-btn" data-file="${c.fileName}" title="Remove"><i class="bi bi-x-lg"></i></button>
+      <td class="text-nowrap d-flex gap-1">
+        <button class="btn btn-sm btn-outline-secondary reextract-btn" data-file="${c.fileName}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>
+        <button class="btn btn-sm btn-outline-danger delete-btn" data-file="${c.fileName}" title="Remove"><i class="bi bi-x-lg"></i></button>
       </td>
     </tr>`;
   }).join('');
