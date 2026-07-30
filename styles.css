@@ -1,6 +1,6 @@
 /* ===================== Layout ===================== */
 body {
-  background: #f5f7fa;
+  background: var(--bs-secondary-bg);
   min-height: 100vh;
 }
 
@@ -8,14 +8,14 @@ body {
 #dropZone {
   transition: all 0.2s ease;
   cursor: pointer;
-  background: #fff;
+  background: var(--bs-body-bg);
 }
 #dropZone:hover {
   border-color: #0d6efd;
-  background: #f0f4ff;
+  background: var(--bs-primary-bg-subtle);
 }
 #dropZone.border-primary {
-  background: #e8f0fe;
+  background: var(--bs-primary-bg-subtle);
 }
 
 /* ===================== PDF Viewer ===================== */
@@ -52,8 +52,9 @@ body {
   white-space: normal;
   word-break: break-word;
   max-width: none;
-  background: #fff;
+  background: var(--bs-body-bg);
   position: relative;
+  z-index: 2;
 }
 
 /* ===================== Status Bar ===================== */
@@ -93,4 +94,16 @@ body {
 .pdf-text-layer span::-moz-selection {
   background: rgba(0, 123, 255, 0.4);
   color: #000 !important;
+}
+
+/* ===================== Dark Mode Overrides ===================== */
+[data-bs-theme="dark"] #resultsTable td:hover {
+  background: var(--bs-dark);
+  box-shadow: 0 0 0 2px var(--bs-border-color);
+}
+[data-bs-theme="dark"] .card {
+  border-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] .modal-content {
+  border-color: var(--bs-border-color);
 }
