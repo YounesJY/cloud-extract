@@ -469,10 +469,48 @@ function crossValidateAndFill(fields, pdfText) {
 }
 
 // ===================== EXTRACTION PIPELINE =====================
+async function detectCategory(text) {
+  if (!state.apiKey || !state.model) return null;
+  const catList = CATEGORIES.map(([val, label]) => `${val}: ${label}`).join('\n');
+  const prompt = `Classify this insurance contract into exactly one category:\n${catList}\n\nReturn ONLY the category code (e.g., "RC", "AT", "AUTO", "Habitation", "Individuelle Accidents", "Schengen Visa") — no explanation.\n\nContract text:\n${text.slice(0, 2000)}`;
+
+  try {
+    const resp = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.apiKey}`,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'Cloud Extract'
+      },
+      body: JSON.stringify({
+        model: state.model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+        max_tokens: 20
+      })
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const result = (data.choices?.[0]?.message?.content || '').trim().replace(/^["']|["']$/g, '');
+    const match = CATEGORIES.find(([val]) => val === result);
+    return match ? match[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 async function extractSingle(pdfData, fileName, category) {
   console.log('extractSingle:', fileName, 'pdfData type:', typeof pdfData, 'length:', pdfData?.byteLength);
   const text = await extractTextFromPdf(pdfData);
   console.log('extractSingle text length:', text?.length);
+
+  // Auto-detect category from text
+  const detected = await detectCategory(text);
+  if (detected && detected !== category) {
+    console.log(`Category auto-detected: ${category} -> ${detected}`);
+    category = detected;
+  }
 
   let fields = {};
   let rawResponse = '';
@@ -498,7 +536,7 @@ async function extractSingle(pdfData, fileName, category) {
   crossValidateAndFill(fields, text);
   validateAndFix(fields);
 
-  return { fields, rawResponse, method, text };
+  return { fields, rawResponse, method, text, category };
 }
 
 function regexExtract(text, category) {
@@ -726,6 +764,7 @@ function renderTable() {
       }
       const result = await extractSingle(state.pdfCache[fileName], fileName, contract.category);
       contract.fields = result.fields;
+      contract.category = result.category || contract.category;
       contract.method = result.method;
       saveToStorage();
       renderTable();
@@ -944,6 +983,7 @@ async function runExtraction() {
         contract.method = 'error';
       } else {
         contract.fields = result.fields;
+        contract.category = result.category || contract.category;
         contract.method = result.method;
       }
     } else {
