@@ -814,6 +814,7 @@ function renderTable() {
       <td><span class="badge bg-${c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c.method}</span></td>
       <td>${fields}</td>
       <td class="text-nowrap d-flex gap-1">
+        <button class="btn btn-sm btn-outline-info preview-btn" data-file="${c.fileName}" title="Preview PDF"><i class="bi bi-eye"></i></button>
         <button class="btn btn-sm btn-outline-secondary reextract-btn" data-file="${c.fileName}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>
         <button class="btn btn-sm btn-outline-danger delete-btn" data-file="${c.fileName}" title="Remove"><i class="bi bi-x-lg"></i></button>
       </td>
@@ -822,6 +823,23 @@ function renderTable() {
 
   // Event delegation for action buttons
   body._listener = body._listener || (body.addEventListener('click', async e => {
+    const previewBtn = e.target.closest('.preview-btn');
+    if (previewBtn) {
+      const fileName = previewBtn.dataset.file;
+      if (!state.pdfCache[fileName]) {
+        showStatus(`"${fileName}" not in cache. Re-upload the file to preview.`, 'warning');
+        return;
+      }
+      const modalEl = document.getElementById('pdfPreviewModal');
+      const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      document.getElementById('pdfSelector').value = fileName;
+      modal.show();
+      modalEl.addEventListener('shown.bs.modal', () => {
+        document.getElementById('pdfSelector').dispatchEvent(new Event('change'));
+      }, { once: true });
+      return;
+    }
+
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
       const fileName = deleteBtn.dataset.file;
@@ -923,10 +941,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (state.contracts.length > 0) {
     renderTable();
     updatePdfSelector();
-    if (state.lastPdf && state.pdfCache[state.lastPdf]) {
-      document.getElementById('pdfSelector').value = state.lastPdf;
-      document.getElementById('pdfSelector').dispatchEvent(new Event('change'));
-    }
   }
 
   updateFieldToggleList();
@@ -1240,8 +1254,6 @@ function handleFiles(files) {
   if (firstNew && state.pdfCache[firstNew]) {
     state.lastPdf = firstNew;
     saveToStorage();
-    document.getElementById('pdfSelector').value = firstNew;
-    document.getElementById('pdfSelector').dispatchEvent(new Event('change'));
   }
 }
 
@@ -1291,16 +1303,7 @@ async function runExtraction() {
 
   showStatus(`Extraction complete. ${pending.filter(c => c.method === 'OpenRouter').length} AI, ${pending.filter(c => c.method === 'regex').length} regex.`, 'success');
   updateExtractBtn();
-
-  // Update first PDF preview
   updatePdfSelector();
-  if (state.contracts.length > 0) {
-    const first = state.contracts[0];
-    if (state.pdfCache[first.fileName]) {
-      document.getElementById('pdfSelector').value = first.fileName;
-      document.getElementById('pdfSelector').dispatchEvent(new Event('change'));
-    }
-  }
 }
 
 function updatePdfSelector() {
