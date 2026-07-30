@@ -664,10 +664,24 @@ function showStatus(msg, type = 'info', progress = -1) {
   } else {
     wrap.classList.add('d-none');
   }
+
+  if (bar._dismissTimer) clearTimeout(bar._dismissTimer);
+  if (type === 'success') {
+    bar._dismissTimer = setTimeout(hideStatus, 5000);
+  }
 }
 
 function hideStatus() {
-  document.getElementById('statusBar').classList.add('d-none');
+  const bar = document.getElementById('statusBar');
+  bar.classList.add('d-none');
+  if (bar._dismissTimer) clearTimeout(bar._dismissTimer);
+}
+
+function updateExtractBtn() {
+  const btn = document.getElementById('extractBtn');
+  const count = state.contracts.filter(c => c.method === 'pending' || c.method === 'regex' || c.method === 'error').length;
+  btn.innerHTML = `<i class="bi bi-magic"></i> Extract${count ? ` (${count})` : ''}`;
+  btn.disabled = state.contracts.length === 0;
 }
 
 async function refreshModelList() {
@@ -754,12 +768,15 @@ function renderTable() {
     empty.classList.remove('d-none');
     wrap.classList.add('d-none');
     document.getElementById('exportBtn').disabled = true;
+    document.getElementById('clearBtn').disabled = state.contracts.length === 0;
+    updateExtractBtn();
     return;
   }
 
   empty.classList.add('d-none');
   wrap.classList.remove('d-none');
-  document.getElementById('exportBtn').disabled = false;
+  document.getElementById('exportBtn').disabled = filtered.length === 0;
+  document.getElementById('clearBtn').disabled = false;
 
   // Header
   const sortIcon = f => state.sortField === f ? (state.sortAsc ? ' ▲' : ' ▼') : '';
@@ -785,7 +802,11 @@ function renderTable() {
     const catOptions = CATEGORIES.map(([val, label]) =>
       `<option value="${val}"${c.category === val ? ' selected' : ''}>${label}</option>`
     ).join('');
-    const fields = visible.map(f => c.fields[f] || '<span class="text-muted">—</span>').join('</td><td>');
+    const fields = visible.map(f =>
+      (c.fields[f] || '')
+        ? `<span class="editable-field" data-file="${c.fileName}" data-field="${f}" contenteditable>${c.fields[f]}</span>`
+        : '<span class="text-muted">—</span>'
+    ).join('</td><td>');
     return `<tr>
       <td>${i + 1}</td>
       <td class="text-nowrap"><small>${c.fileName}</small></td>
@@ -858,6 +879,24 @@ function renderTable() {
     showStatus(`Category changed to "${sel.value}" for "${fileName}". Re-extract to update fields.`, 'info');
   }));
 
+  body._editListener = body._editListener || (body.addEventListener('focusout', e => {
+    const span = e.target.closest('.editable-field');
+    if (!span || !span.textContent.trim()) return;
+    const fileName = span.dataset.file;
+    const field = span.dataset.field;
+    const contract = state.contracts.find(c => c.fileName === fileName);
+    if (!contract) return;
+    contract.fields[field] = span.textContent.trim();
+    saveToStorage();
+  }, true));
+
+  body._editKeyListener = body._editKeyListener || (body.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.closest('.editable-field')) {
+      e.preventDefault();
+      e.target.blur();
+    }
+  }));
+
   head._sortListener = head._sortListener || (head.addEventListener('click', e => {
     const th = e.target.closest('th[data-sort]');
     if (!th) return;
@@ -866,6 +905,8 @@ function renderTable() {
     else { state.sortField = field; state.sortAsc = true; }
     renderTable();
   }));
+
+  updateExtractBtn();
 }
 
 // ===================== EVENT HANDLERS =====================
@@ -899,6 +940,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveToStorage();
     const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
     if (modal) modal.hide();
+    showStatus('Settings saved.', 'success');
   });
 
   document.getElementById('settingsModal').addEventListener('show.bs.modal', refreshModelList);
@@ -950,12 +992,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const visible = [...state.visibleFields].filter(f => state.contracts.some(c => c.fields[f]));
     exportToXlsx(state.contracts, visible);
     bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+    showStatus('Exported to XLSX.', 'success');
   });
 
   document.getElementById('exportCsvBtn').addEventListener('click', () => {
     const visible = [...state.visibleFields].filter(f => state.contracts.some(c => c.fields[f]));
     exportToCsv(state.contracts, visible);
     bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+    showStatus('Exported to CSV.', 'success');
   });
 
   document.getElementById('clearBtn').addEventListener('click', async () => {
@@ -1010,6 +1054,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('pageInfo').classList.remove('d-none');
       document.getElementById('zoomNav').classList.remove('d-none');
       document.getElementById('pdfSearchWrap').classList.remove('d-none');
+      document.getElementById('prevPage').disabled = true;
+      document.getElementById('nextPage').disabled = result.numPages <= 1;
+      document.getElementById('zoomOut').disabled = state.currentScale <= 0.25;
+      document.getElementById('zoomIn').disabled = state.currentScale >= 4;
       document.getElementById('pageInfo').textContent = `Page ${result.pageNum} / ${result.numPages}`;
       document.getElementById('pdfSearchInput').value = '';
       document.getElementById('pdfSearchInput').dispatchEvent(new Event('input'));
@@ -1025,6 +1073,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function renderCurrentPage() {
     if (!state.pdfCache[state.currentPdfName]) return;
+    document.getElementById('prevPage').disabled = state.currentPage <= 1;
+    document.getElementById('nextPage').disabled = state.currentPage >= state.totalPages;
+    document.getElementById('zoomOut').disabled = state.currentScale <= 0.25;
+    document.getElementById('zoomIn').disabled = state.currentScale >= 4;
     const viewer = document.getElementById('pdfViewer');
     viewer.innerHTML = '<div class="text-center p-3"><div class="spinner-border"></div></div>';
     try {
@@ -1104,6 +1156,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('searchInput').addEventListener('input', renderTable);
 
+  document.getElementById('selectAllFields').addEventListener('click', () => {
+    document.querySelectorAll('.field-toggle').forEach(cb => { cb.checked = true; state.visibleFields.add(cb.value); });
+    renderTable();
+  });
+  document.getElementById('deselectAllFields').addEventListener('click', () => {
+    document.querySelectorAll('.field-toggle').forEach(cb => { cb.checked = false; state.visibleFields.delete(cb.value); });
+    renderTable();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'TEXTAREA') {
+      if (!document.getElementById('extractBtn').disabled) document.getElementById('extractBtn').click();
+    }
+  });
+
   document.getElementById('darkModeToggle').addEventListener('click', () => {
     const next = state.theme === 'dark' ? 'light' : 'dark';
     applyTheme(next);
@@ -1167,7 +1234,7 @@ function handleFiles(files) {
 
   updatePdfSelector();
   renderTable();
-  extractBtn.disabled = state.contracts.length === 0;
+  updateExtractBtn();
   saveToStorage();
 
   if (firstNew && state.pdfCache[firstNew]) {
@@ -1181,11 +1248,12 @@ function handleFiles(files) {
 async function runExtraction() {
   const extractBtn = document.getElementById('extractBtn');
   extractBtn.disabled = true;
+  extractBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Extracting...';
 
   const pending = state.contracts.filter(c => c.method === 'pending' || c.method === 'regex' || c.method === 'error');
   if (pending.length === 0) {
     showStatus('All contracts already extracted.', 'info');
-    extractBtn.disabled = false;
+    updateExtractBtn();
     return;
   }
 
@@ -1222,7 +1290,7 @@ async function runExtraction() {
   renderTable();
 
   showStatus(`Extraction complete. ${pending.filter(c => c.method === 'OpenRouter').length} AI, ${pending.filter(c => c.method === 'regex').length} regex.`, 'success');
-  extractBtn.disabled = false;
+  updateExtractBtn();
 
   // Update first PDF preview
   updatePdfSelector();
