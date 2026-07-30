@@ -34,7 +34,8 @@ let state = {
   pdfCache: {}, // { fileName: Uint8Array }
   currentPdfName: '',
   currentPage: 1,
-  totalPages: 0
+  totalPages: 0,
+  theme: 'light'
 };
 
 // ===================== STORAGE (localStorage — no CDN needed) =====================
@@ -133,10 +134,12 @@ function loadFromStorage() {
       state.model = data.model || '';
       state.contracts = data.contracts || [];
       if (data.visibleFields) state.visibleFields = new Set(data.visibleFields);
+      if (data.theme) state.theme = data.theme;
     }
   } catch (e) {
     console.warn('Storage read failed, using defaults:', e);
   }
+  if (state.theme === 'dark') applyTheme('dark');
 }
 
 function saveToStorage() {
@@ -145,12 +148,21 @@ function saveToStorage() {
       apiKey: state.apiKey,
       model: state.model,
       contracts: state.contracts,
-      visibleFields: [...state.visibleFields]
+      visibleFields: [...state.visibleFields],
+      theme: state.theme
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
     console.warn('Storage write failed:', e);
   }
+}
+
+// ===================== DARK MODE =====================
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.setAttribute('data-bs-theme', theme);
+  const icon = document.querySelector('#darkModeToggle i');
+  if (icon) icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
 }
 
 // ===================== PDF EXTRACTION (pdf.js from CDN) =====================
@@ -988,6 +1000,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('searchInput').addEventListener('input', renderTable);
+
+  document.getElementById('darkModeToggle').addEventListener('click', () => {
+    const next = state.theme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    saveToStorage();
+  });
 
   document.getElementById('batchCategorySelect').addEventListener('change', e => {
     const cat = e.target.value;
