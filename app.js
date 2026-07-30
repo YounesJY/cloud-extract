@@ -39,7 +39,8 @@ let state = {
   theme: 'light',
   lastPdf: '',
   sortField: '',
-  sortAsc: true
+  sortAsc: true,
+  fieldOrder: []
 };
 
 // ===================== STORAGE (localStorage — no CDN needed) =====================
@@ -138,6 +139,7 @@ function loadFromStorage() {
       state.model = data.model || '';
       state.contracts = data.contracts || [];
       if (data.visibleFields) state.visibleFields = new Set(data.visibleFields);
+      if (data.fieldOrder) state.fieldOrder = data.fieldOrder;
       if (data.theme) state.theme = data.theme;
       if (data.lastPdf) state.lastPdf = data.lastPdf;
     }
@@ -154,6 +156,7 @@ function saveToStorage() {
       model: state.model,
       contracts: state.contracts,
       visibleFields: [...state.visibleFields],
+      fieldOrder: state.fieldOrder,
       theme: state.theme,
       lastPdf: state.lastPdf
     };
@@ -385,6 +388,16 @@ function parseJsonResponse(text, fieldNames) {
 function getFieldsForCategory(category) {
   const extra = CATEGORY_FIELDS[category] || [];
   return [...FIELD_NAMES, ...extra];
+}
+
+function syncFieldOrder() {
+  const expected = getFieldsForCategory(document.getElementById('categorySelect').value);
+  // Add any missing expected fields at the end
+  for (const f of expected) {
+    if (!state.fieldOrder.includes(f)) state.fieldOrder.push(f);
+  }
+  // Remove fields no longer in the expected set
+  state.fieldOrder = state.fieldOrder.filter(f => expected.includes(f));
 }
 
 // ===================== VALIDATION (ported from C#) =====================
@@ -727,10 +740,21 @@ function updateFieldToggleList() {
   const body = document.getElementById('fieldToggleBody');
   const allFields = getFieldsForCategory(document.getElementById('categorySelect').value);
 
-  let html = '';
-  for (const field of allFields) {
+  syncFieldOrder();
+  const ordered = allFields.sort((a, b) => {
+    const ai = state.fieldOrder.indexOf(a);
+    const bi = state.fieldOrder.indexOf(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+
+  let html = '<div class="mb-2 d-flex gap-2">';
+  html += '<button class="btn btn-outline-primary btn-sm" id="selectAllFields">Select All</button>';
+  html += '<button class="btn btn-outline-secondary btn-sm" id="deselectAllFields">Deselect All</button>';
+  html += '</div>';
+  for (const field of ordered) {
     const checked = state.visibleFields.has(field) ? 'checked' : '';
-    html += `<div class="form-check">
+    html += `<div class="form-check field-order-item" draggable="true" data-field="${field}">
+      <span class="drag-handle" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
       <input class="form-check-input field-toggle" type="checkbox" value="${field}" id="toggle_${field}" ${checked}>
       <label class="form-check-label" for="toggle_${field}">${field}</label>
     </div>`;
@@ -742,6 +766,54 @@ function updateFieldToggleList() {
       if (cb.checked) state.visibleFields.add(cb.value);
       else state.visibleFields.delete(cb.value);
       renderTable();
+    });
+  });
+
+  // Re-register Select All / Deselect All since we replaced their DOM
+  document.getElementById('selectAllFields')?.addEventListener('click', () => {
+    document.querySelectorAll('.field-toggle').forEach(cb => { cb.checked = true; state.visibleFields.add(cb.value); });
+    renderTable();
+  });
+  document.getElementById('deselectAllFields')?.addEventListener('click', () => {
+    document.querySelectorAll('.field-toggle').forEach(cb => { cb.checked = false; state.visibleFields.delete(cb.value); });
+    renderTable();
+  });
+
+  // Drag-and-drop reordering
+  let dragSrc = null;
+  document.querySelectorAll('.field-order-item').forEach(item => {
+    item.addEventListener('dragstart', e => {
+      dragSrc = item;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', item.dataset.field);
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      document.querySelectorAll('.field-order-item').forEach(i => i.classList.remove('drag-over'));
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.field-order-item').forEach(i => i.classList.remove('drag-over'));
+      item.classList.add('drag-over');
+    });
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('drag-over');
+    });
+    item.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === item) return;
+      const all = [...document.querySelectorAll('.field-order-item')];
+      const fromIdx = all.indexOf(dragSrc);
+      const toIdx = all.indexOf(item);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const field = dragSrc.dataset.field;
+      state.fieldOrder = state.fieldOrder.filter(f => f !== field);
+      state.fieldOrder.splice(toIdx < fromIdx ? toIdx : toIdx - 1, 0, field);
+      saveToStorage();
+      renderTable();
+      updateFieldToggleList();
     });
   });
 }
@@ -760,9 +832,17 @@ function renderTable() {
       )
     : state.contracts;
 
-  const visible = [...state.visibleFields].filter(f =>
+  let visible = [...state.visibleFields].filter(f =>
     filtered.some(c => c.fields[f])
   );
+  // Apply user-defined field order
+  if (state.fieldOrder.length > 0) {
+    visible.sort((a, b) => {
+      const ai = state.fieldOrder.indexOf(a);
+      const bi = state.fieldOrder.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+  }
 
   if (filtered.length === 0 || visible.length === 0) {
     empty.classList.remove('d-none');
@@ -1170,15 +1250,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('searchInput').addEventListener('input', renderTable);
 
-  document.getElementById('selectAllFields').addEventListener('click', () => {
-    document.querySelectorAll('.field-toggle').forEach(cb => { cb.checked = true; state.visibleFields.add(cb.value); });
-    renderTable();
-  });
-  document.getElementById('deselectAllFields').addEventListener('click', () => {
-    document.querySelectorAll('.field-toggle').forEach(cb => { cb.checked = false; state.visibleFields.delete(cb.value); });
-    renderTable();
-  });
-
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'TEXTAREA') {
       if (!document.getElementById('extractBtn').disabled) document.getElementById('extractBtn').click();
@@ -1306,6 +1377,7 @@ async function runExtraction() {
 
   saveToStorage();
   renderTable();
+  updateFieldToggleList();
 
   showStatus(`Extraction complete. ${pending.filter(c => c.method === 'OpenRouter').length} AI, ${pending.filter(c => c.method === 'regex').length} regex.`, 'success');
   updateExtractBtn();

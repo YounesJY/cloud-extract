@@ -195,6 +195,47 @@ body {
   background: #1a1d23;
 }
 
+/* ===================== Field Reordering ===================== */
+.field-order-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: default;
+  transition: background 0.15s ease, transform 0.15s ease;
+  margin-bottom: 2px;
+}
+.field-order-item:hover {
+  background: var(--bs-tertiary-bg);
+}
+.field-order-item .drag-handle {
+  cursor: grab;
+  color: var(--bs-secondary-color);
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+.field-order-item .drag-handle:active {
+  cursor: grabbing;
+}
+.field-order-item.dragging {
+  opacity: 0.4;
+  transform: scale(0.97);
+}
+.field-order-item.drag-over {
+  border-top: 2px solid #0d6efd;
+  background: var(--bs-primary-bg-subtle);
+}
+.field-order-item .form-check-input {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+.field-order-item .form-check-label {
+  font-size: 0.85rem;
+}
+
 /* ===================== Inline Editable Fields ===================== */
 .editable-field {
   border-bottom: 1px dashed var(--bs-border-color);
