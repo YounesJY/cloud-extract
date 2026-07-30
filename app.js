@@ -1185,12 +1185,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  document.getElementById('darkModeToggle').addEventListener('click', () => {
-    const next = state.theme === 'dark' ? 'light' : 'dark';
-    applyTheme(next);
-    saveToStorage();
-  });
-
   document.getElementById('batchCategorySelect').addEventListener('change', e => {
     const cat = e.target.value;
     if (!cat) return;
@@ -1256,6 +1250,18 @@ function handleFiles(files) {
     saveToStorage();
   }
 }
+
+// Dark mode toggle — separate sync handler so async errors in DOMContentLoaded can't break it
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('darkModeToggle');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      const next = state.theme === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      saveToStorage();
+    });
+  }
+});
 
 async function runExtraction() {
   const extractBtn = document.getElementById('extractBtn');
