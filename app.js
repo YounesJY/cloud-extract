@@ -166,6 +166,12 @@ function saveToStorage() {
   }
 }
 
+// ===================== HTML ESCAPE =====================
+function esc(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ===================== DARK MODE =====================
 function applyTheme(theme) {
   state.theme = theme;
@@ -334,30 +340,44 @@ Return ONLY the JSON object — no markdown, no explanation, no extra text.
 Contract text:
 ${truncated}`;
 
-  const resp = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${state.apiKey}`,
-      'HTTP-Referer': window.location.origin,
-      'X-Title': 'Cloud Extract'
-    },
-    body: JSON.stringify({
-      model: state.model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-      max_tokens: 2000
-    })
-  });
+  const maxRetries = 2;
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const resp = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${state.apiKey}`,
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'Cloud Extract'
+        },
+        body: JSON.stringify({
+          model: state.model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          max_tokens: 2000
+        })
+      });
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`OpenRouter error ${resp.status}: ${errText}`);
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`OpenRouter error ${resp.status}: ${errText}`);
+      }
+
+      const data = await resp.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      return parseJsonResponse(content, fieldNames);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxRetries) {
+        const delay = (attempt + 1) * 1000;
+        console.warn(`OpenRouter attempt ${attempt + 1} failed, retrying in ${delay}ms:`, err.message);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
   }
-
-  const data = await resp.json();
-  const content = data.choices?.[0]?.message?.content || '';
-  return parseJsonResponse(content, fieldNames);
+  throw lastErr;
 }
 
 function parseJsonResponse(text, fieldNames) {
@@ -719,7 +739,7 @@ async function refreshModelList() {
   for (const m of models) {
     const opt = document.createElement('option');
     opt.value = m.id;
-    const pricing = m.pricing ? ` (prompt: ${m.pricing.prompt || '?'})` : '';
+    const pricing = m.pricing ? ` (prompt: ${m.pricing.prompt != null ? m.pricing.prompt : '?'})` : '';
     opt.textContent = `${m.name || m.id}${pricing}`;
     select.appendChild(opt);
   }
@@ -884,19 +904,19 @@ function renderTable() {
     ).join('');
     const fields = visible.map(f =>
       (c.fields[f] || '')
-        ? `<span class="editable-field" data-file="${c.fileName}" data-field="${f}" contenteditable>${c.fields[f]}</span>`
+        ? `<span class="editable-field" data-file="${esc(c.fileName)}" data-field="${esc(f)}" contenteditable>${esc(c.fields[f])}</span>`
         : '<span class="text-muted">—</span>'
     ).join('</td><td>');
     return `<tr>
       <td>${i + 1}</td>
-      <td class="text-nowrap"><small>${c.fileName}</small></td>
-      <td><select class="form-select form-select-sm cat-select" data-file="${c.fileName}" style="min-width:160px">${catOptions}</select></td>
-      <td><span class="badge bg-${c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c.method}</span></td>
+      <td class="text-nowrap"><small>${esc(c.fileName)}</small></td>
+      <td><select class="form-select form-select-sm cat-select" data-file="${esc(c.fileName)}" style="min-width:160px">${catOptions}</select></td>
+      <td><span class="badge bg-${c._extracting ? 'warning' : c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c._extracting ? 'Extracting...' : esc(c.method)}</span></td>
       <td>${fields}</td>
       <td class="text-nowrap d-flex gap-1">
-        <button class="btn btn-sm btn-outline-info preview-btn" data-file="${c.fileName}" title="Preview PDF"><i class="bi bi-eye"></i></button>
-        <button class="btn btn-sm btn-outline-secondary reextract-btn" data-file="${c.fileName}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>
-        <button class="btn btn-sm btn-outline-danger delete-btn" data-file="${c.fileName}" title="Remove"><i class="bi bi-x-lg"></i></button>
+        <button class="btn btn-sm btn-outline-info preview-btn" data-file="${esc(c.fileName)}" title="Preview PDF"><i class="bi bi-eye"></i></button>
+        <button class="btn btn-sm btn-outline-secondary reextract-btn" data-file="${esc(c.fileName)}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>
+        <button class="btn btn-sm btn-outline-danger delete-btn" data-file="${esc(c.fileName)}" title="Remove"><i class="bi bi-x-lg"></i></button>
       </td>
     </tr>`;
   }).join('');
@@ -1165,8 +1185,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  let _rendering = false;
   async function renderCurrentPage() {
-    if (!state.pdfCache[state.currentPdfName]) return;
+    if (!state.pdfCache[state.currentPdfName] || _rendering) return;
+    _rendering = true;
     document.getElementById('prevPage').disabled = state.currentPage <= 1;
     document.getElementById('nextPage').disabled = state.currentPage >= state.totalPages;
     document.getElementById('zoomOut').disabled = state.currentScale <= 0.25;
@@ -1183,8 +1205,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('zoomReset').textContent = Math.round(state.currentScale * 100) + '%';
       const q = document.getElementById('pdfSearchInput').value.trim().toLowerCase();
       if (q) highlightInPdf(q);
+      _rendering = false;
     } catch (err) {
       console.error('PDF render failed:', err);
+      viewer.innerHTML = '<div class="text-center text-danger p-5">Failed to render PDF page. Try re-uploading the file.</div>';
+      _rendering = false;
     }
   }
 
@@ -1236,10 +1261,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const q = e.target.value.trim().toLowerCase();
     if (q) {
       const count = highlightInPdf(q);
-      document.getElementById('pdfSearchClear').style.display = count > 0 ? '' : 'none';
+      document.getElementById('pdfSearchClear').style.display = '';
+      const info = document.getElementById('pageInfo');
+      if (count === 0) info.textContent = info.textContent.replace(/ — .*/, '') + ' — No matches';
+      else info.textContent = info.textContent.replace(/ — .*/, '') + ` — ${count} match${count > 1 ? 'es' : ''}`;
     } else {
       highlightInPdf('');
       document.getElementById('pdfSearchClear').style.display = 'none';
+      document.getElementById('pageInfo').textContent = document.getElementById('pageInfo').textContent.replace(/ — .*/, '');
     }
   });
 
@@ -1253,6 +1282,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'TEXTAREA') {
       if (!document.getElementById('extractBtn').disabled) document.getElementById('extractBtn').click();
+    }
+    // PDF navigation shortcuts — only when PDF preview modal is open
+    if (document.getElementById('pdfPreviewModal')?.classList.contains('show')) {
+      if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        document.getElementById('prevPage')?.click();
+      } else if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        document.getElementById('nextPage')?.click();
+      } else if (e.key === 'Equal' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.getElementById('zoomIn')?.click();
+      } else if (e.key === 'Minus' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.getElementById('zoomOut')?.click();
+      } else if (e.key === 'Digit0' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.getElementById('zoomReset')?.click();
+      }
     }
   });
 
@@ -1349,6 +1397,8 @@ async function runExtraction() {
   showStatus(`Extracting ${pending.length} contract(s)...`, 'info', 0);
 
   const results = await Promise.allSettled(pending.map(async (c, i) => {
+    c._extracting = true;
+    renderTable();
     showStatus(`[${i + 1}/${pending.length}] ${c.fileName}...`, 'info', Math.round((i / pending.length) * 90));
 
     if (!state.pdfCache[c.fileName]) {
@@ -1375,6 +1425,7 @@ async function runExtraction() {
     }
   }
 
+  state.contracts.forEach(c => delete c._extracting);
   saveToStorage();
   renderTable();
   updateFieldToggleList();
@@ -1388,7 +1439,7 @@ function updatePdfSelector() {
   const select = document.getElementById('pdfSelector');
   const current = select.value;
   select.innerHTML = '<option value="">Select PDF...</option>' +
-    state.contracts.map(c => `<option value="${c.fileName}">${c.fileName}</option>`).join('');
+    state.contracts.map(c => `<option value="${esc(c.fileName)}">${esc(c.fileName)}</option>`).join('');
   if (current && state.contracts.some(c => c.fileName === current)) {
     select.value = current;
   }

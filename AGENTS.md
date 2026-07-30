@@ -49,12 +49,11 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - PDF binary cached in IndexedDB (survives page reload)
 
 ### PDF Preview
-- Multi-page viewer with prev/next navigation and "Page X / Y" indicator
-- Zoom in/out/reset (25%–400%)
+- Per-record modal (click 👁 on any row) with prev/next navigation and "Page X / Y" indicator
+- Zoom in/out/reset (25%–400%), keyboard shortcuts (ArrowLeft/Right, Ctrl+Plus/Minus, Ctrl+0)
 - Text layer overlay — select, copy, right-click text from PDF
-- Search within PDF with yellow highlighting and clear button
-- Smooth CSS transitions on page/zoom change
-- Remembers last selected PDF across reload
+- Search within PDF with yellow highlighting, match count, and "No matches" feedback
+- PDF selector dropdown to switch between uploaded files
 
 ### Extraction
 - Auto-detect category via AI before extraction
@@ -67,8 +66,10 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - Dynamic table with per-row category dropdown (changeable anytime)
 - Sortable columns (click any header to sort ▲/▼)
 - Search/filter input filters contracts by filename or field values
-- Field visibility toggles per category
-- Scrollable table body (max-height 500px)
+- Field visibility toggles per category with Select All / Deselect All
+- Drag-and-drop field reordering (persistent order)
+- Inline editable fields (click to edit, Enter or blur to save)
+- Scrollable table body (fills viewport: calc(100vh - 280px))
 - XLSX/CSV export of visible columns
 
 ### Settings
@@ -81,6 +82,10 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - Gradient navbar with drop shadow
 - Card shadows with hover deepen effect
 - Animated drop zone with scale-up icon on hover
+- Per-record PDF preview modal
+- Extraction table fills full viewport height
+- Dark mode toggle with persistent preference
+- Keyboard shortcuts: Enter to extract, ArrowLeft/Right for PDF pages, Ctrl+Plus/Minus for zoom
 - Responsive layout (mobile-friendly)
 
 ## Cross-Validation Rules (port from C#)

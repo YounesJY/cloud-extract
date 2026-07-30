@@ -8,8 +8,9 @@ Web-based insurance contract data extraction tool. Upload Moroccan insurance PDF
 - **AI Extraction** — Uses OpenRouter API (DeepSeek V3, GPT-4o Mini, GPT-4.1 Nano, or Gemini 2.0 Flash)
 - **Auto Category Detection** — AI classifies the document type before extraction
 - **Smart Validation** — Cross-references AI output with PDF text via regex
-- **PDF Preview** — Multi-page viewer with zoom (25%–400%), text selection, copy, and search
-- **Results Table** — Sortable columns, per-row category change, search/filter, field visibility toggles
+- **PDF Preview** — Per-record modal with multi-page viewer, zoom (25%–400%), text selection, copy, and search
+- **Results Table** — Sortable columns, per-row category change, search/filter, field visibility toggles, drag-and-drop field reordering
+- **Per-file Actions** — Preview PDF, re-extract, or delete individual files
 - **Per-file Actions** — Re-extract or delete individual files
 - **Batch Operations** — Bulk set category, batch re-extract
 - **Export to Excel/CSV** — Download visible columns only
@@ -39,16 +40,11 @@ cloud-extract/
 ├── styles.css         Custom styles
 ├── server.ps1         HTTP server script
 ├── start.bat          Launcher
+├── start.vbs          Silent zero-window launcher
+├── stop.bat           Stop the HTTP server
 ├── README.md
 ├── AGENTS.md
-├── CHANGELOG.md
-└── lib/
-    ├── pdf.min.js
-    ├── pdf.worker.min.js
-    ├── xlsx.full.min.js
-    └── bootstrap@5.3.3/
-        ├── css/bootstrap.min.css
-        └── js/bootstrap.bundle.min.js
+└── CHANGELOG.md
 ```
 
 ## License

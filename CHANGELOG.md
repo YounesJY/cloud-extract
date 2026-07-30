@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.4.0] — 2026-07-30
+
+### Added
+- Drag-and-drop field reordering in Fields modal (persistent order)
+- PDF Preview in a per-record modal (click 👁 on any row)
+- Extraction table fills full viewport height (`calc(100vh - 280px)`)
+- OpenRouter retry logic (2 retries with 1s/2s backoff)
+- PDF keyboard shortcuts: ArrowLeft/Right for page, Ctrl+Plus/Minus for zoom, Ctrl+0 to reset
+- Per-row extraction progress: method badge shows "Extracting..." during batch
+- PDF search match count in page info ("N matches" / "No matches")
+- HTML escape (`esc()`) for all user data injected into innerHTML (XSS fix)
+- Select All / Deselect All buttons regenerated inside updateFieldToggleList
+- `start.vbs` for silent zero-window launch, `stop.bat` to kill server
+
+### Changed
+- PDF Preview moved from main layout to a Bootstrap modal (table now full-width)
+- `server.ps1` updated for reliability
+- `loadFromStorage` saves/loads `fieldOrder`
+- Dark mode toggle moved to separate sync DOMContentLoaded listener (immune to async errors)
+
+### Fixed
+- XSS: field values and filenames now HTML-escaped before innerHTML injection
+- Search clear button shows whenever there's text (not only when matches found)
+- `renderCurrentPage` now shows user-facing error instead of silent spinner
+- Race condition on rapid prev/next clicks — rendering lock prevents overlap
+- Free models with `0` pricing no longer show "?" (falsy check fix)
+- `lib/` directory removed from README (uses CDN)
+- `.gitignore` added
+
 ## [1.3.0] — 2026-07-30
 
 ### Added
