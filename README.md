@@ -4,13 +4,17 @@ Web-based insurance contract data extraction tool. Upload Moroccan insurance PDF
 
 ## Features
 
-- **PDF Upload** — Drag & drop or file picker, batch upload with category selection
-- **AI Extraction** — Uses OpenRouter API (GPT-4o-mini, DeepSeek, or other free models)
+- **PDF Upload** — Drag & drop or file picker, batch upload with progress bar, 50MB limit
+- **AI Extraction** — Uses OpenRouter API (DeepSeek V3, GPT-4o Mini, GPT-4.1 Nano, or Gemini 2.0 Flash)
+- **Auto Category Detection** — AI classifies the document type before extraction
 - **Smart Validation** — Cross-references AI output with PDF text via regex
-- **PDF Preview** — Visual PDF viewer using pdf.js
-- **Export to Excel/CSV** — Download results
-- **Settings** — Configure API key, AI model, contract category
-- **Global field toggle** — Show/hide columns in results table
+- **PDF Preview** — Multi-page viewer with zoom (25%–400%), text selection, copy, and search
+- **Results Table** — Sortable columns, per-row category change, search/filter, field visibility toggles
+- **Per-file Actions** — Re-extract or delete individual files
+- **Batch Operations** — Bulk set category, batch re-extract
+- **Export to Excel/CSV** — Download visible columns only
+- **Dark Mode** — Toggle in navbar, persists across reload
+- **Persistent Storage** — Contracts in localStorage, PDF cache in IndexedDB (survives page reload)
 
 ## How to run
 

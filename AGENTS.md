@@ -7,7 +7,7 @@ Web-based port of the C# "ContractProcessor" desktop app. Extracts structured da
 ## Stack
 
 - **Frontend**: Vanilla HTML/CSS/JS + Bootstrap 5.3.3
-- **PDF**: pdf.js 3.11.174 (Mozilla) for text extraction + page rendering
+- **PDF**: pdf.js 3.11.174 (Mozilla) for text extraction + page rendering with text layer
 - **Export**: SheetJS (xlsx) + manual CSV
 - **Storage**: localStorage (contracts, settings) + IndexedDB (PDF binary cache)
 - **Server**: PowerShell `HttpListener` (no Python/Node — start.bat)
@@ -25,12 +25,12 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 
 ## Extraction Flow
 
-1. User uploads PDF(s) — binary stored in IndexedDB for session persistence
+1. User uploads PDF(s) — binary stored in IndexedDB, shows upload progress
 2. pdf.js extracts text with spatial positioning (letter grouping by Y)
 3. AI auto-detects contract category (RC, AT, AUTO, etc.) from text
 4. Cleaned text sent to OpenRouter with category-specific prompt
 5. AI response parsed + cross-validated against PDF text via regex
-6. Results displayed in table, stored in localStorage
+6. Results displayed in sortable table, stored in localStorage
 
 ## Models
 
@@ -44,9 +44,17 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 ## Features
 
 ### File Handling
-- Drag & drop + browse upload, PDF-only filter, 50MB limit
-- Duplicate detection, per-row delete button
+- Drag & drop + browse upload, progress bar, PDF-only filter, 50MB limit
+- Duplicate detection, per-row delete button with confirmation
 - PDF binary cached in IndexedDB (survives page reload)
+
+### PDF Preview
+- Multi-page viewer with prev/next navigation and "Page X / Y" indicator
+- Zoom in/out/reset (25%–400%)
+- Text layer overlay — select, copy, right-click text from PDF
+- Search within PDF with yellow highlighting and clear button
+- Smooth CSS transitions on page/zoom change
+- Remembers last selected PDF across reload
 
 ### Extraction
 - Auto-detect category via AI before extraction
@@ -56,9 +64,24 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - Cross-validation: phone, CIN, dates, numeric, field sanity checks
 
 ### Display
-- Dynamic table with per-row category dropdown
+- Dynamic table with per-row category dropdown (changeable anytime)
+- Sortable columns (click any header to sort ▲/▼)
+- Search/filter input filters contracts by filename or field values
 - Field visibility toggles per category
+- Scrollable table body (max-height 500px)
 - XLSX/CSV export of visible columns
+
+### Settings
+- API key with show/hide toggle
+- Live model list from OpenRouter API (fallback to hardcoded)
+- Batch category set for all contracts
+- Dark mode toggle with persistent preference
+
+### UI/UX
+- Gradient navbar with drop shadow
+- Card shadows with hover deepen effect
+- Animated drop zone with scale-up icon on hover
+- Responsive layout (mobile-friendly)
 
 ## Cross-Validation Rules (port from C#)
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.0] — 2026-07-30
+
+### Added
+- Dark mode toggle with persistent preference in localStorage
+- PDF text layer overlay (select, copy text from PDF preview)
+- Search within PDF with yellow highlighting and clear button
+- Zoom in/out/reset controls (25%–400%) in PDF preview header
+- Table column sorting — click any header to sort ▲/▼
+- Search/filter input in results header — filters contracts by filename or field values
+- Batch category dropdown in results header — set category for all contracts at once
+- Upload progress bar — status shows "Reading file X of Y..." during upload
+- Auto-show first PDF preview after upload
+- Remember last selected PDF across reload
+
+### Changed
+- UI/UX overhaul: gradient navbar, card shadows, animated drop zone, polished table styling
+- PDF viewer card header redesigned with zoom nav, search, and page controls
+- Results table: removed `table-bordered`, scrollable body (`max-height: 500px`), hover highlights
+- Dark mode now uses Bootstrap CSS variables throughout instead of hardcoded colors
+- Upload flow refactored into shared `readPdfFiles()` function with progress reporting
+
+### Fixed
+- Dark mode: body, drop zone, table, cards, and modals now properly adapt via CSS variables
+- PDF viewer background uses `var(--bs-body-bg)` instead of hardcoded `bg-light`
+- Action button delegation handles both delete and re-extract correctly
+
 ## [1.2.0] — 2026-07-30
 
 ### Added
