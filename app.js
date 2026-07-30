@@ -16,6 +16,15 @@ const CATEGORY_FIELDS = {
 
 const NUMERIC_FIELDS = ['Prime Totale TTC', 'Prime Nette', 'Taxes'];
 
+const CATEGORIES = [
+  ['RC', 'Responsabilité Civile'],
+  ['AT', 'Accident du Travail'],
+  ['AUTO', 'Automobile'],
+  ['Habitation', 'Habitation'],
+  ['Individuelle Accidents', 'Individuelle Accidents'],
+  ['Schengen Visa', 'Schengen Visa']
+];
+
 // ===================== STATE =====================
 let state = {
   apiKey: '',
@@ -662,15 +671,19 @@ function renderTable() {
   document.getElementById('exportBtn').disabled = false;
 
   // Header
-  head.innerHTML = '<tr><th>#</th><th>File</th><th>Method</th>' +
+  head.innerHTML = '<tr><th>#</th><th>File</th><th>Category</th><th>Method</th>' +
     visible.map(f => `<th>${f}</th>`).join('') + '<th></th></tr>';
 
   // Body
   body.innerHTML = state.contracts.map((c, i) => {
+    const catOptions = CATEGORIES.map(([val, label]) =>
+      `<option value="${val}"${c.category === val ? ' selected' : ''}>${label}</option>`
+    ).join('');
     const fields = visible.map(f => c.fields[f] || '<span class="text-muted">—</span>').join('</td><td>');
     return `<tr>
       <td>${i + 1}</td>
       <td class="text-nowrap"><small>${c.fileName}</small></td>
+      <td><select class="form-select form-select-sm cat-select" data-file="${c.fileName}">${catOptions}</select></td>
       <td><span class="badge bg-${c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c.method}</span></td>
       <td>${fields}</td>
       <td class="text-nowrap">
@@ -724,6 +737,19 @@ function renderTable() {
       showStatus(`Re-extraction failed: ${err.message}`, 'danger');
     }
   }), true);
+
+  // Event delegation for category changes
+  body._catListener = body._catListener || (body.addEventListener('change', e => {
+    const sel = e.target.closest('.cat-select');
+    if (!sel) return;
+    const fileName = sel.dataset.file;
+    const contract = state.contracts.find(c => c.fileName === fileName);
+    if (!contract) return;
+    contract.category = sel.value;
+    saveToStorage();
+    updateFieldToggleList();
+    showStatus(`Category changed to "${sel.value}" for "${fileName}". Re-extract to update fields.`, 'info');
+  }));
 }
 
 // ===================== EVENT HANDLERS =====================
