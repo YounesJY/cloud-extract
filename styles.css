@@ -2,26 +2,71 @@
 body {
   background: var(--bs-secondary-bg);
   min-height: 100vh;
+  padding-bottom: 2rem;
+}
+
+/* ===================== Navbar ===================== */
+.navbar {
+  background: linear-gradient(135deg, #0d6efd, #0a58ca) !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+}
+.navbar-brand {
+  letter-spacing: -0.5px;
+  font-size: 1.15rem;
+}
+.navbar-brand i {
+  font-size: 1.3rem;
+  margin-right: 4px;
+}
+
+/* ===================== Cards ===================== */
+.card {
+  border: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  transition: box-shadow 0.2s ease;
+}
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+}
+.card-header {
+  background: var(--bs-body-bg);
+  border-bottom: 1px solid var(--bs-border-color);
 }
 
 /* ===================== Upload Zone ===================== */
 #dropZone {
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
   cursor: pointer;
   background: var(--bs-body-bg);
+  border: 2px dashed var(--bs-border-color) !important;
+  border-radius: 12px;
 }
 #dropZone:hover {
-  border-color: #0d6efd;
+  border-color: #0d6efd !important;
   background: var(--bs-primary-bg-subtle);
+  transform: translateY(-1px);
 }
 #dropZone.border-primary {
   background: var(--bs-primary-bg-subtle);
+  border-color: #0d6efd !important;
+}
+#dropZone i.bi-cloud-upload {
+  transition: transform 0.3s ease;
+}
+#dropZone:hover i.bi-cloud-upload {
+  transform: scale(1.1);
+}
+
+/* ===================== Buttons ===================== */
+.btn {
+  transition: all 0.15s ease;
 }
 
 /* ===================== PDF Viewer ===================== */
 #pdfViewer {
   min-height: 600px;
   transition: opacity 0.2s ease;
+  background: var(--bs-body-bg);
 }
 #pdfViewer > div {
   transition: opacity 0.2s ease;
@@ -33,12 +78,23 @@ body {
 }
 
 /* ===================== Table ===================== */
+.table-wrap {
+  max-height: 500px;
+  overflow-y: auto;
+}
 #resultsTable th {
   white-space: nowrap;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 3;
+  background: var(--bs-dark);
+  color: #fff;
+  padding: 0.5rem 0.4rem;
+  user-select: none;
+}
+#resultsTable th[data-sort]:hover {
+  background: #1a1d20;
 }
 #resultsTable td {
   font-size: 0.85rem;
@@ -46,6 +102,13 @@ body {
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding: 0.4rem;
+}
+#resultsTable tr {
+  transition: background 0.1s ease;
+}
+#resultsTable tbody tr:hover {
+  background: var(--bs-primary-bg-subtle);
 }
 #resultsTable td:hover {
   overflow: visible;
@@ -55,19 +118,28 @@ body {
   background: var(--bs-body-bg);
   position: relative;
   z-index: 2;
+  box-shadow: 0 0 0 2px var(--bs-primary-border-subtle);
 }
 
 /* ===================== Status Bar ===================== */
 #statusBar {
   transition: all 0.3s ease;
+  border-radius: 8px;
+}
+#statusBar.d-none {
+  display: none !important;
 }
 #progressBar {
   transition: width 0.3s ease;
 }
 
-/* ===================== Navbar ===================== */
-.navbar-brand {
-  letter-spacing: -0.5px;
+/* ===================== Extract Button ===================== */
+#extractBtn {
+  height: 46px;
+  font-weight: 600;
+}
+#extractBtn i {
+  margin-right: 4px;
 }
 
 /* ===================== Utilities ===================== */
@@ -97,13 +169,22 @@ body {
 }
 
 /* ===================== Dark Mode Overrides ===================== */
-[data-bs-theme="dark"] #resultsTable td:hover {
-  background: var(--bs-dark);
-  box-shadow: 0 0 0 2px var(--bs-border-color);
+[data-bs-theme="dark"] body {
+  background: #1a1d23;
+}
+[data-bs-theme="dark"] .navbar {
+  background: linear-gradient(135deg, #0a58ca, #084298) !important;
 }
 [data-bs-theme="dark"] .card {
+  background: #212529;
   border-color: var(--bs-border-color);
 }
 [data-bs-theme="dark"] .modal-content {
   border-color: var(--bs-border-color);
+}
+[data-bs-theme="dark"] #dropZone {
+  background: #1a1d23;
+}
+[data-bs-theme="dark"] #resultsTable tbody tr:hover {
+  background: rgba(13, 110, 253, 0.08);
 }
