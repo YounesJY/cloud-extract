@@ -673,24 +673,56 @@ function renderTable() {
       <td class="text-nowrap"><small>${c.fileName}</small></td>
       <td><span class="badge bg-${c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c.method}</span></td>
       <td>${fields}</td>
-      <td><button class="btn btn-sm btn-outline-danger border-0 delete-btn" data-file="${c.fileName}" title="Remove"><i class="bi bi-x-lg"></i></button></td>
+      <td class="text-nowrap">
+        <button class="btn btn-sm btn-outline-secondary border-0 reextract-btn" data-file="${c.fileName}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>
+        <button class="btn btn-sm btn-outline-danger border-0 delete-btn" data-file="${c.fileName}" title="Remove"><i class="bi bi-x-lg"></i></button>
+      </td>
     </tr>`;
   }).join('');
 
-  // Event delegation for delete buttons
+  // Event delegation for action buttons
   body._listener = body._listener || (body.addEventListener('click', async e => {
-    const btn = e.target.closest('.delete-btn');
-    if (!btn) return;
-    const fileName = btn.dataset.file;
-    if (!confirm(`Remove "${fileName}"?`)) return;
-    state.contracts = state.contracts.filter(c => c.fileName !== fileName);
-    delete state.pdfCache[fileName];
-    await deletePdfFromCache(fileName);
-    saveToStorage();
-    renderTable();
-    updatePdfSelector();
-    document.getElementById('extractBtn').disabled = state.contracts.length === 0;
-    showStatus(`Removed "${fileName}".`, 'info');
+    const deleteBtn = e.target.closest('.delete-btn');
+    if (deleteBtn) {
+      const fileName = deleteBtn.dataset.file;
+      if (!confirm(`Remove "${fileName}"?`)) return;
+      state.contracts = state.contracts.filter(c => c.fileName !== fileName);
+      delete state.pdfCache[fileName];
+      await deletePdfFromCache(fileName);
+      saveToStorage();
+      renderTable();
+      updatePdfSelector();
+      document.getElementById('extractBtn').disabled = state.contracts.length === 0;
+      showStatus(`Removed "${fileName}".`, 'info');
+      return;
+    }
+
+    const reBtn = e.target.closest('.reextract-btn');
+    if (!reBtn || reBtn.disabled) return;
+    const fileName = reBtn.dataset.file;
+    const contract = state.contracts.find(c => c.fileName === fileName);
+    if (!contract) return;
+
+    reBtn.disabled = true;
+    reBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    showStatus(`Re-extracting "${fileName}"...`, 'info', 0);
+
+    try {
+      if (!state.pdfCache[fileName]) {
+        throw new Error('File not in cache. Please re-upload.');
+      }
+      const result = await extractSingle(state.pdfCache[fileName], fileName, contract.category);
+      contract.fields = result.fields;
+      contract.method = result.method;
+      saveToStorage();
+      renderTable();
+      showStatus(`Re-extraction complete: "${fileName}" (${result.method}).`, 'success');
+    } catch (err) {
+      contract.method = 'error';
+      saveToStorage();
+      renderTable();
+      showStatus(`Re-extraction failed: ${err.message}`, 'danger');
+    }
   }), true);
 }
 
