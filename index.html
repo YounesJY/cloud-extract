@@ -70,7 +70,16 @@
         <div class="card-header d-flex justify-content-between align-items-center py-2">
           <span class="fw-semibold"><i class="bi bi-file-earmark-pdf"></i> PDF Preview</span>
           <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm d-none" id="pdfSearchWrap" style="width:180px">
+              <input type="search" id="pdfSearchInput" class="form-control" placeholder="Search in PDF...">
+              <button class="btn btn-outline-secondary" id="pdfSearchClear"><i class="bi bi-x"></i></button>
+            </div>
             <span id="pageInfo" class="small text-muted d-none"></span>
+            <div class="btn-group btn-group-sm d-none" id="zoomNav">
+              <button class="btn btn-outline-secondary" id="zoomOut" title="Zoom out"><i class="bi bi-dash-circle"></i></button>
+              <button class="btn btn-outline-secondary" id="zoomReset" title="Reset zoom">100%</button>
+              <button class="btn btn-outline-secondary" id="zoomIn" title="Zoom in"><i class="bi bi-plus-circle"></i></button>
+            </div>
             <div class="btn-group btn-group-sm d-none" id="pageNav">
               <button class="btn btn-outline-secondary" id="prevPage"><i class="bi bi-chevron-left"></i></button>
               <button class="btn btn-outline-secondary" id="nextPage"><i class="bi bi-chevron-right"></i></button>

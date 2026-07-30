@@ -35,6 +35,7 @@ let state = {
   currentPdfName: '',
   currentPage: 1,
   totalPages: 0,
+  currentScale: 1.5,
   theme: 'light'
 };
 
@@ -226,17 +227,41 @@ function cleanText(raw) {
 }
 
 // ===================== PDF PAGE RENDER (preview) =====================
-async function renderPdfPreview(pdfData, pageNum) {
+async function renderPdfPreview(pdfData, pageNum, scale = 1.5) {
   if (!pdfjsAvailable) throw new Error('pdf.js library not loaded');
   const pdf = await pdfjsLib.getDocument({ data: pdfData.slice() }).promise;
   const page = await pdf.getPage(pageNum);
-  const viewport = page.getViewport({ scale: 1.5 });
+  const viewport = page.getViewport({ scale });
+
+  const container = document.createElement('div');
+  container.style.cssText = `position:relative;width:${viewport.width}px;height:${viewport.height}px;margin:0 auto`;
+
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   const ctx = canvas.getContext('2d');
   await page.render({ canvasContext: ctx, viewport }).promise;
-  return { canvas, numPages: pdf.numPages, pageNum };
+  container.appendChild(canvas);
+
+  const textLayer = document.createElement('div');
+  textLayer.className = 'pdf-text-layer';
+  textLayer.style.cssText = `position:absolute;top:0;left:0;width:${viewport.width}px;height:${viewport.height}px;overflow:hidden`;
+
+  const textContent = await page.getTextContent();
+  for (const item of textContent.items) {
+    const span = document.createElement('span');
+    span.textContent = item.str;
+    span.dataset.text = item.str;
+    const tx = item.transform;
+    const fontSize = Math.round(tx[0] * scale * 100) / 100;
+    const x = Math.round(tx[4] * scale);
+    const y = Math.round(viewport.height - tx[5] * scale - fontSize);
+    span.style.cssText = `position:absolute;left:${x}px;top:${y}px;font-size:${fontSize}px;font-family:sans-serif;color:transparent;white-space:pre;pointer-events:auto;user-select:text`;
+    textLayer.appendChild(span);
+  }
+
+  container.appendChild(textLayer);
+  return { canvas, container, numPages: pdf.numPages, pageNum, scale };
 }
 
 // ===================== OPENROUTER API =====================
@@ -923,6 +948,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('pdfViewer').innerHTML = '<div class="text-center text-muted p-5"><i class="bi bi-file-earmark-pdf fs-1 d-block mb-2"></i><p class="mb-0">Upload PDFs to preview</p></div>';
     document.getElementById('pageNav').classList.add('d-none');
     document.getElementById('pageInfo').classList.add('d-none');
+    document.getElementById('zoomNav').classList.add('d-none');
+    document.getElementById('pdfSearchWrap').classList.add('d-none');
     document.getElementById('extractBtn').disabled = true;
     showStatus('All data cleared.', 'info');
   });
@@ -938,65 +965,118 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('pdfViewer').innerHTML = '<div class="text-center text-muted p-5"><i class="bi bi-file-earmark-pdf fs-1 d-block mb-2"></i><p class="mb-0">Select a PDF</p></div>';
       document.getElementById('pageNav').classList.add('d-none');
       document.getElementById('pageInfo').classList.add('d-none');
+      document.getElementById('zoomNav').classList.add('d-none');
+      document.getElementById('pdfSearchWrap').classList.add('d-none');
       return;
     }
     state.currentPdfName = fileName;
     state.currentPage = 1;
     state.totalPages = 0;
+    state.currentScale = 1.5;
+    document.getElementById('zoomReset').textContent = '150%';
     const viewer = document.getElementById('pdfViewer');
     viewer.innerHTML = '<div class="text-center p-3"><div class="spinner-border"></div></div>';
     try {
-      const result = await renderPdfPreview(state.pdfCache[fileName], 1);
+      const result = await renderPdfPreview(state.pdfCache[fileName], 1, state.currentScale);
       viewer.innerHTML = '';
-      viewer.appendChild(result.canvas);
-      result.canvas.style.width = '100%';
-      result.canvas.style.height = 'auto';
+      viewer.appendChild(result.container);
+      result.container.style.width = '100%';
+      result.container.style.height = 'auto';
       state.totalPages = result.numPages;
       document.getElementById('pageNav').classList.remove('d-none');
       document.getElementById('pageInfo').classList.remove('d-none');
+      document.getElementById('zoomNav').classList.remove('d-none');
+      document.getElementById('pdfSearchWrap').classList.remove('d-none');
       document.getElementById('pageInfo').textContent = `Page ${result.pageNum} / ${result.numPages}`;
+      document.getElementById('pdfSearchInput').value = '';
+      document.getElementById('pdfSearchInput').dispatchEvent(new Event('input'));
     } catch (err) {
       console.error('PDF preview render failed:', err);
       viewer.innerHTML = '<div class="text-center text-danger p-5">Failed to render PDF preview</div>';
       document.getElementById('pageNav').classList.add('d-none');
       document.getElementById('pageInfo').classList.add('d-none');
+      document.getElementById('zoomNav').classList.add('d-none');
+      document.getElementById('pdfSearchWrap').classList.add('d-none');
     }
   });
+
+  async function renderCurrentPage() {
+    if (!state.pdfCache[state.currentPdfName]) return;
+    const viewer = document.getElementById('pdfViewer');
+    viewer.innerHTML = '<div class="text-center p-3"><div class="spinner-border"></div></div>';
+    try {
+      const result = await renderPdfPreview(state.pdfCache[state.currentPdfName], state.currentPage, state.currentScale);
+      viewer.innerHTML = '';
+      viewer.appendChild(result.container);
+      result.container.style.width = '100%';
+      result.container.style.height = 'auto';
+      document.getElementById('pageInfo').textContent = `Page ${result.pageNum} / ${result.numPages}`;
+      document.getElementById('zoomReset').textContent = Math.round(state.currentScale * 100) + '%';
+      const q = document.getElementById('pdfSearchInput').value.trim().toLowerCase();
+      if (q) highlightInPdf(q);
+    } catch (err) {
+      console.error('PDF render failed:', err);
+    }
+  }
 
   document.getElementById('prevPage').addEventListener('click', async () => {
     if (state.currentPage <= 1 || !state.pdfCache[state.currentPdfName]) return;
     state.currentPage--;
-    const viewer = document.getElementById('pdfViewer');
-    viewer.innerHTML = '<div class="text-center p-3"><div class="spinner-border"></div></div>';
-    try {
-      const result = await renderPdfPreview(state.pdfCache[state.currentPdfName], state.currentPage);
-      viewer.innerHTML = '';
-      viewer.appendChild(result.canvas);
-      result.canvas.style.width = '100%';
-      result.canvas.style.height = 'auto';
-      document.getElementById('pageInfo').textContent = `Page ${result.pageNum} / ${result.numPages}`;
-    } catch (err) {
-      console.error('PDF page render failed:', err);
-      state.currentPage++;
-    }
+    await renderCurrentPage();
   });
 
   document.getElementById('nextPage').addEventListener('click', async () => {
     if (state.currentPage >= state.totalPages || !state.pdfCache[state.currentPdfName]) return;
     state.currentPage++;
-    const viewer = document.getElementById('pdfViewer');
-    viewer.innerHTML = '<div class="text-center p-3"><div class="spinner-border"></div></div>';
-    try {
-      const result = await renderPdfPreview(state.pdfCache[state.currentPdfName], state.currentPage);
-      viewer.innerHTML = '';
-      viewer.appendChild(result.canvas);
-      result.canvas.style.width = '100%';
-      result.canvas.style.height = 'auto';
-      document.getElementById('pageInfo').textContent = `Page ${result.pageNum} / ${result.numPages}`;
-    } catch (err) {
-      console.error('PDF page render failed:', err);
-      state.currentPage--;
+    await renderCurrentPage();
+  });
+
+  document.getElementById('zoomIn').addEventListener('click', async () => {
+    state.currentScale = Math.min(state.currentScale + 0.25, 4);
+    await renderCurrentPage();
+  });
+
+  document.getElementById('zoomOut').addEventListener('click', async () => {
+    state.currentScale = Math.max(state.currentScale - 0.25, 0.25);
+    await renderCurrentPage();
+  });
+
+  document.getElementById('zoomReset').addEventListener('click', async () => {
+    state.currentScale = 1.5;
+    await renderCurrentPage();
+  });
+
+  function highlightInPdf(query) {
+    const textLayer = document.querySelector('.pdf-text-layer');
+    if (!textLayer) return;
+    const spans = textLayer.querySelectorAll('span');
+    let count = 0;
+    for (const span of spans) {
+      span.style.background = '';
+      span.style.color = 'transparent';
+      if (query && span.dataset.text.toLowerCase().includes(query)) {
+        span.style.background = 'rgba(255,255,0,0.5)';
+        span.style.color = '#000';
+        count++;
+      }
     }
+    return count;
+  }
+
+  document.getElementById('pdfSearchInput').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    if (q) {
+      const count = highlightInPdf(q);
+      document.getElementById('pdfSearchClear').style.display = count > 0 ? '' : 'none';
+    } else {
+      highlightInPdf('');
+      document.getElementById('pdfSearchClear').style.display = 'none';
+    }
+  });
+
+  document.getElementById('pdfSearchClear').addEventListener('click', () => {
+    document.getElementById('pdfSearchInput').value = '';
+    document.getElementById('pdfSearchInput').dispatchEvent(new Event('input'));
   });
 
   document.getElementById('searchInput').addEventListener('input', renderTable);

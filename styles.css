@@ -80,3 +80,13 @@ body {
     padding-right: 10px;
   }
 }
+
+/* ===================== PDF Text Layer ===================== */
+.pdf-text-layer span::selection {
+  background: rgba(0, 123, 255, 0.4);
+  color: #000 !important;
+}
+.pdf-text-layer span::-moz-selection {
+  background: rgba(0, 123, 255, 0.4);
+  color: #000 !important;
+}
