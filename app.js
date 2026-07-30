@@ -721,7 +721,7 @@ function renderTable() {
     return `<tr>
       <td>${i + 1}</td>
       <td class="text-nowrap"><small>${c.fileName}</small></td>
-      <td><select class="form-select form-select-sm cat-select" data-file="${c.fileName}">${catOptions}</select></td>
+      <td><select class="form-select form-select-sm cat-select" data-file="${c.fileName}" style="min-width:160px">${catOptions}</select></td>
       <td><span class="badge bg-${c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c.method}</span></td>
       <td>${fields}</td>
       <td class="text-nowrap">

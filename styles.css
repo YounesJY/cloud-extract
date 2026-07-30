@@ -51,9 +51,6 @@ body {
   background: #fff;
   position: relative;
 }
-#resultsTable .cat-select {
-  min-width: 160px;
-}
 
 /* ===================== Status Bar ===================== */
 #statusBar {
