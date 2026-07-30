@@ -1,0 +1,82 @@
+/* ===================== Layout ===================== */
+body {
+  background: #f5f7fa;
+  min-height: 100vh;
+}
+
+/* ===================== Upload Zone ===================== */
+#dropZone {
+  transition: all 0.2s ease;
+  cursor: pointer;
+  background: #fff;
+}
+#dropZone:hover {
+  border-color: #0d6efd;
+  background: #f0f4ff;
+}
+#dropZone.border-primary {
+  background: #e8f0fe;
+}
+
+/* ===================== PDF Viewer ===================== */
+#pdfViewer {
+  min-height: 600px;
+}
+#pdfViewer canvas {
+  display: block;
+  margin: 0 auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* ===================== Table ===================== */
+#resultsTable th {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+#resultsTable td {
+  font-size: 0.85rem;
+  vertical-align: middle;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#resultsTable td:hover {
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
+  max-width: none;
+  background: #fff;
+  position: relative;
+}
+
+/* ===================== Status Bar ===================== */
+#statusBar {
+  transition: all 0.3s ease;
+}
+#progressBar {
+  transition: width 0.3s ease;
+}
+
+/* ===================== Navbar ===================== */
+.navbar-brand {
+  letter-spacing: -0.5px;
+}
+
+/* ===================== Utilities ===================== */
+.border-dashed {
+  border-style: dashed !important;
+}
+
+/* ===================== Responsive ===================== */
+@media (max-width: 768px) {
+  #pdfViewer {
+    min-height: 300px;
+  }
+  .container-fluid {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud Extract</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="styles.css" rel="stylesheet">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="#"><i class="bi bi-cloud-arrow-up"></i> Cloud Extract</a>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#settingsModal">
+        <i class="bi bi-gear"></i> Settings
+      </button>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid py-3">
+
+  <!-- Upload + Category Row -->
+  <div class="row g-2 mb-3">
+    <div class="col-md-8">
+      <div id="dropZone" class="border border-2 border-dashed rounded p-4 text-center text-muted">
+        <i class="bi bi-cloud-upload fs-1 d-block mb-2"></i>
+        <p class="mb-1">Drop PDF files here or <a href="#" id="filePickerLink">browse</a></p>
+        <small>All PDFs up to 50MB each</small>
+        <input type="file" id="fileInput" accept=".pdf" multiple class="d-none">
+      </div>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-muted mb-1">Category</label>
+      <select id="categorySelect" class="form-select">
+        <option value="RC">Responsabilité Civile</option>
+        <option value="AT">Accident du Travail</option>
+        <option value="AUTO">Automobile</option>
+        <option value="Habitation">Habitation</option>
+        <option value="Individuelle Accidents">Individuelle Accidents</option>
+        <option value="Schengen Visa">Schengen Visa</option>
+      </select>
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+      <button id="extractBtn" class="btn btn-primary w-100" disabled>
+        <i class="bi bi-magic"></i> Extract
+      </button>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div id="statusBar" class="alert alert-info d-none py-2 mb-3">
+    <span id="statusText"></span>
+    <div id="progressWrap" class="progress mt-1 d-none" style="height:6px">
+      <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Main content: PDF Preview + Results -->
+  <div class="row g-3">
+    <!-- PDF Preview -->
+    <div class="col-md-5">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+          <span class="fw-semibold"><i class="bi bi-file-earmark-pdf"></i> PDF Preview</span>
+          <select id="pdfSelector" class="form-select form-select-sm w-auto">
+            <option value="">No PDF selected</option>
+          </select>
+        </div>
+        <div id="pdfViewer" class="card-body p-0 bg-light" style="height:600px;overflow-y:auto">
+          <div class="text-center text-muted p-5">
+            <i class="bi bi-file-earmark-pdf fs-1 d-block mb-2"></i>
+            <p class="mb-0">Upload PDFs to preview</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Table -->
+    <div class="col-md-7">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+          <span class="fw-semibold"><i class="bi bi-table"></i> Extracted Data</span>
+          <div class="d-flex gap-2">
+            <button id="toggleFieldsBtn" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#fieldToggleModal">
+              <i class="bi bi-eye"></i> Fields
+            </button>
+            <button id="exportBtn" class="btn btn-success btn-sm" disabled>
+              <i class="bi bi-download"></i> Export
+            </button>
+            <button id="clearBtn" class="btn btn-outline-danger btn-sm">
+              <i class="bi bi-trash"></i> Clear
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0" style="overflow-x:auto">
+          <div id="resultsWrap" class="text-center text-muted p-5">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            <p class="mb-0">Extract contracts to see results</p>
+          </div>
+          <div id="tableWrap" class="d-none">
+            <table id="resultsTable" class="table table-sm table-striped table-bordered mb-0">
+              <thead class="table-dark" id="tableHead"></thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-gear"></i> Settings</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">OpenRouter API Key</label>
+          <div class="input-group">
+            <input type="password" id="apiKeyInput" class="form-control" placeholder="sk-or-v1-...">
+            <button class="btn btn-outline-secondary" id="toggleKeyBtn" type="button">
+              <i class="bi bi-eye"></i>
+            </button>
+          </div>
+          <div class="form-text">Get a free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">AI Model</label>
+          <select id="modelSelect" class="form-select">
+            <option value="">Select a model...</option>
+          </select>
+          <div class="form-text">
+            <span id="modelPricing" class="text-muted"></span>
+            <button id="refreshModelsBtn" class="btn btn-link btn-sm p-0 ms-2">
+              <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveSettingsBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Field Toggle Modal -->
+<div class="modal fade" id="fieldToggleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-eye"></i> Visible Fields</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="fieldToggleBody">
+        <p class="text-muted">Extract contracts first to see available fields.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-download"></i> Export</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <button id="exportXlsxBtn" class="btn btn-success w-100 mb-2">
+          <i class="bi bi-file-earmark-excel"></i> Export as .xlsx
+        </button>
+        <button id="exportCsvBtn" class="btn btn-outline-success w-100">
+          <i class="bi bi-filetype-csv"></i> Export as .csv
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
