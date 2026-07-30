@@ -21,6 +21,10 @@ body {
 /* ===================== PDF Viewer ===================== */
 #pdfViewer {
   min-height: 600px;
+  transition: opacity 0.2s ease;
+}
+#pdfViewer > div {
+  transition: opacity 0.2s ease;
 }
 #pdfViewer canvas {
   display: block;

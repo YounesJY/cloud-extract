@@ -36,7 +36,10 @@ let state = {
   currentPage: 1,
   totalPages: 0,
   currentScale: 1.5,
-  theme: 'light'
+  theme: 'light',
+  lastPdf: '',
+  sortField: '',
+  sortAsc: true
 };
 
 // ===================== STORAGE (localStorage — no CDN needed) =====================
@@ -136,6 +139,7 @@ function loadFromStorage() {
       state.contracts = data.contracts || [];
       if (data.visibleFields) state.visibleFields = new Set(data.visibleFields);
       if (data.theme) state.theme = data.theme;
+      if (data.lastPdf) state.lastPdf = data.lastPdf;
     }
   } catch (e) {
     console.warn('Storage read failed, using defaults:', e);
@@ -150,7 +154,8 @@ function saveToStorage() {
       model: state.model,
       contracts: state.contracts,
       visibleFields: [...state.visibleFields],
-      theme: state.theme
+      theme: state.theme,
+      lastPdf: state.lastPdf
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
@@ -757,11 +762,26 @@ function renderTable() {
   document.getElementById('exportBtn').disabled = false;
 
   // Header
-  head.innerHTML = '<tr><th>#</th><th>File</th><th>Category</th><th>Method</th>' +
-    visible.map(f => `<th>${f}</th>`).join('') + '<th></th></tr>';
+  const sortIcon = f => state.sortField === f ? (state.sortAsc ? ' ▲' : ' ▼') : '';
+  head.innerHTML = '<tr><th></th><th style="cursor:pointer" data-sort="fileName">File' + sortIcon('fileName') + '</th>' +
+    '<th style="cursor:pointer" data-sort="category">Category' + sortIcon('category') + '</th>' +
+    '<th style="cursor:pointer" data-sort="method">Method' + sortIcon('method') + '</th>' +
+    visible.map(f => `<th style="cursor:pointer" data-sort="${f}">${f}${sortIcon(f)}</th>`).join('') + '<th></th></tr>';
+
+  // Sort
+  let sorted = filtered;
+  if (state.sortField) {
+    sorted = [...filtered].sort((a, b) => {
+      let va = state.sortField === 'fileName' ? a.fileName : state.sortField === 'category' ? a.category : state.sortField === 'method' ? a.method : a.fields[state.sortField] || '';
+      let vb = state.sortField === 'fileName' ? b.fileName : state.sortField === 'category' ? b.category : state.sortField === 'method' ? b.method : b.fields[state.sortField] || '';
+      const numA = parseFloat(va), numB = parseFloat(vb);
+      if (!isNaN(numA) && !isNaN(numB)) return state.sortAsc ? numA - numB : numB - numA;
+      return state.sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+  }
 
   // Body
-  body.innerHTML = filtered.map((c, i) => {
+  body.innerHTML = sorted.map((c, i) => {
     const catOptions = CATEGORIES.map(([val, label]) =>
       `<option value="${val}"${c.category === val ? ' selected' : ''}>${label}</option>`
     ).join('');
@@ -837,6 +857,15 @@ function renderTable() {
     updateFieldToggleList();
     showStatus(`Category changed to "${sel.value}" for "${fileName}". Re-extract to update fields.`, 'info');
   }));
+
+  head._sortListener = head._sortListener || (head.addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]');
+    if (!th) return;
+    const field = th.dataset.sort;
+    if (state.sortField === field) state.sortAsc = !state.sortAsc;
+    else { state.sortField = field; state.sortAsc = true; }
+    renderTable();
+  }));
 }
 
 // ===================== EVENT HANDLERS =====================
@@ -853,6 +882,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (state.contracts.length > 0) {
     renderTable();
     updatePdfSelector();
+    if (state.lastPdf && state.pdfCache[state.lastPdf]) {
+      document.getElementById('pdfSelector').value = state.lastPdf;
+      document.getElementById('pdfSelector').dispatchEvent(new Event('change'));
+    }
   }
 
   updateFieldToggleList();
@@ -896,20 +929,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     e.preventDefault();
     e.stopPropagation();
     dropZone.classList.remove('border-primary', 'bg-light');
-    const files = e.dataTransfer.files;
-    for (const file of files) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) continue;
-      if (file.size > MAX_FILE_SIZE) { console.warn('File too large:', file.name, file.size); continue; }
-      try {
-        const bytes = await file.arrayBuffer();
-        const data = new Uint8Array(bytes);
-        state.pdfCache[file.name] = data;
-        await savePdfToCache(file.name, data);
-      } catch (err) {
-        console.error('File read failed:', file.name, err);
-      }
-    }
-    handleFiles(files);
+    const pdfs = await readPdfFiles(e.dataTransfer.files);
+    handleFiles(pdfs);
   });
 
   document.getElementById('filePickerLink').addEventListener('click', e => {
@@ -970,6 +991,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     state.currentPdfName = fileName;
+    state.lastPdf = fileName;
+    saveToStorage();
     state.currentPage = 1;
     state.totalPages = 0;
     state.currentScale = 1.5;
@@ -1104,14 +1127,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ===================== FILE HANDLING =====================
+async function readPdfFiles(fileList) {
+  const pdfs = [];
+  let done = 0;
+  const total = fileList.length;
+  showStatus(`Reading files...`, 'info', 0);
+  for (const file of fileList) {
+    if (!file.name.toLowerCase().endsWith('.pdf')) continue;
+    if (file.size > MAX_FILE_SIZE) { console.warn('File too large:', file.name, file.size); continue; }
+    showStatus(`Reading ${file.name}...`, 'info', Math.round((done / total) * 100));
+    const bytes = await file.arrayBuffer();
+    const data = new Uint8Array(bytes);
+    state.pdfCache[file.name] = data;
+    await savePdfToCache(file.name, data);
+    pdfs.push(file);
+    done++;
+  }
+  showStatus(`Read ${done} PDF(s).`, 'success');
+  return pdfs;
+}
+
 function handleFiles(files) {
   const category = document.getElementById('categorySelect').value;
   const extractBtn = document.getElementById('extractBtn');
+  let firstNew = '';
 
   for (const file of files) {
     if (!file.name.toLowerCase().endsWith('.pdf')) continue;
     if (state.contracts.some(c => c.fileName === file.name)) continue;
-
+    if (!firstNew) firstNew = file.name;
     state.contracts.push({
       fileName: file.name,
       category,
@@ -1124,7 +1168,15 @@ function handleFiles(files) {
   updatePdfSelector();
   renderTable();
   extractBtn.disabled = state.contracts.length === 0;
-  saveToStorage();}
+  saveToStorage();
+
+  if (firstNew && state.pdfCache[firstNew]) {
+    state.lastPdf = firstNew;
+    saveToStorage();
+    document.getElementById('pdfSelector').value = firstNew;
+    document.getElementById('pdfSelector').dispatchEvent(new Event('change'));
+  }
+}
 
 async function runExtraction() {
   const extractBtn = document.getElementById('extractBtn');
@@ -1194,14 +1246,7 @@ function updatePdfSelector() {
 }
 
 document.getElementById('fileInput').addEventListener('change', async e => {
-  const files = e.target.files;
-  for (const file of files) {
-    if (!file.name.toLowerCase().endsWith('.pdf')) continue;
-    if (file.size > MAX_FILE_SIZE) { console.warn('File too large:', file.name, file.size); continue; }
-    const bytes = await file.arrayBuffer();
-    const data = new Uint8Array(bytes);
-    state.pdfCache[file.name] = data;
-    await savePdfToCache(file.name, data);
-  }
-  handleFiles(files);
+  const pdfs = await readPdfFiles(e.target.files);
+  handleFiles(pdfs);
+  e.target.value = '';
 });
