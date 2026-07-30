@@ -66,9 +66,16 @@
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center py-2">
           <span class="fw-semibold"><i class="bi bi-file-earmark-pdf"></i> PDF Preview</span>
-          <select id="pdfSelector" class="form-select form-select-sm w-auto">
-            <option value="">No PDF selected</option>
-          </select>
+          <div class="d-flex align-items-center gap-2">
+            <span id="pageInfo" class="small text-muted d-none"></span>
+            <div class="btn-group btn-group-sm d-none" id="pageNav">
+              <button class="btn btn-outline-secondary" id="prevPage"><i class="bi bi-chevron-left"></i></button>
+              <button class="btn btn-outline-secondary" id="nextPage"><i class="bi bi-chevron-right"></i></button>
+            </div>
+            <select id="pdfSelector" class="form-select form-select-sm w-auto">
+              <option value="">No PDF selected</option>
+            </select>
+          </div>
         </div>
         <div id="pdfViewer" class="card-body p-0 bg-light" style="height:600px;overflow-y:auto">
           <div class="text-center text-muted p-5">

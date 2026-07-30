@@ -31,7 +31,10 @@ let state = {
   model: '',
   contracts: [],
   visibleFields: new Set(FIELD_NAMES),
-  pdfCache: {} // { fileName: Uint8Array }
+  pdfCache: {}, // { fileName: Uint8Array }
+  currentPdfName: '',
+  currentPage: 1,
+  totalPages: 0
 };
 
 // ===================== STORAGE (localStorage — no CDN needed) =====================
@@ -221,7 +224,7 @@ async function renderPdfPreview(pdfData, pageNum) {
   canvas.height = viewport.height;
   const ctx = canvas.getContext('2d');
   await page.render({ canvasContext: ctx, viewport }).promise;
-  return canvas;
+  return { canvas, numPages: pdf.numPages, pageNum };
 }
 
 // ===================== OPENROUTER API =====================
@@ -898,6 +901,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderTable();
     updatePdfSelector();
     document.getElementById('pdfViewer').innerHTML = '<div class="text-center text-muted p-5"><i class="bi bi-file-earmark-pdf fs-1 d-block mb-2"></i><p class="mb-0">Upload PDFs to preview</p></div>';
+    document.getElementById('pageNav').classList.add('d-none');
+    document.getElementById('pageInfo').classList.add('d-none');
     document.getElementById('extractBtn').disabled = true;
     showStatus('All data cleared.', 'info');
   });
@@ -911,19 +916,66 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('pdfSelector change:', fileName, 'in cache:', !!state.pdfCache[fileName], 'cache keys:', Object.keys(state.pdfCache));
     if (!fileName || !state.pdfCache[fileName]) {
       document.getElementById('pdfViewer').innerHTML = '<div class="text-center text-muted p-5"><i class="bi bi-file-earmark-pdf fs-1 d-block mb-2"></i><p class="mb-0">Select a PDF</p></div>';
+      document.getElementById('pageNav').classList.add('d-none');
+      document.getElementById('pageInfo').classList.add('d-none');
       return;
     }
+    state.currentPdfName = fileName;
+    state.currentPage = 1;
+    state.totalPages = 0;
     const viewer = document.getElementById('pdfViewer');
     viewer.innerHTML = '<div class="text-center p-3"><div class="spinner-border"></div></div>';
     try {
-      const canvas = await renderPdfPreview(state.pdfCache[fileName], 1);
+      const result = await renderPdfPreview(state.pdfCache[fileName], 1);
       viewer.innerHTML = '';
-      viewer.appendChild(canvas);
-      canvas.style.width = '100%';
-      canvas.style.height = 'auto';
+      viewer.appendChild(result.canvas);
+      result.canvas.style.width = '100%';
+      result.canvas.style.height = 'auto';
+      state.totalPages = result.numPages;
+      document.getElementById('pageNav').classList.remove('d-none');
+      document.getElementById('pageInfo').classList.remove('d-none');
+      document.getElementById('pageInfo').textContent = `Page ${result.pageNum} / ${result.numPages}`;
     } catch (err) {
       console.error('PDF preview render failed:', err);
       viewer.innerHTML = '<div class="text-center text-danger p-5">Failed to render PDF preview</div>';
+      document.getElementById('pageNav').classList.add('d-none');
+      document.getElementById('pageInfo').classList.add('d-none');
+    }
+  });
+
+  document.getElementById('prevPage').addEventListener('click', async () => {
+    if (state.currentPage <= 1 || !state.pdfCache[state.currentPdfName]) return;
+    state.currentPage--;
+    const viewer = document.getElementById('pdfViewer');
+    viewer.innerHTML = '<div class="text-center p-3"><div class="spinner-border"></div></div>';
+    try {
+      const result = await renderPdfPreview(state.pdfCache[state.currentPdfName], state.currentPage);
+      viewer.innerHTML = '';
+      viewer.appendChild(result.canvas);
+      result.canvas.style.width = '100%';
+      result.canvas.style.height = 'auto';
+      document.getElementById('pageInfo').textContent = `Page ${result.pageNum} / ${result.numPages}`;
+    } catch (err) {
+      console.error('PDF page render failed:', err);
+      state.currentPage++;
+    }
+  });
+
+  document.getElementById('nextPage').addEventListener('click', async () => {
+    if (state.currentPage >= state.totalPages || !state.pdfCache[state.currentPdfName]) return;
+    state.currentPage++;
+    const viewer = document.getElementById('pdfViewer');
+    viewer.innerHTML = '<div class="text-center p-3"><div class="spinner-border"></div></div>';
+    try {
+      const result = await renderPdfPreview(state.pdfCache[state.currentPdfName], state.currentPage);
+      viewer.innerHTML = '';
+      viewer.appendChild(result.canvas);
+      result.canvas.style.width = '100%';
+      result.canvas.style.height = 'auto';
+      document.getElementById('pageInfo').textContent = `Page ${result.pageNum} / ${result.numPages}`;
+    } catch (err) {
+      console.error('PDF page render failed:', err);
+      state.currentPage--;
     }
   });
 });
