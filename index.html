@@ -93,6 +93,15 @@
           <span class="fw-semibold"><i class="bi bi-table"></i> Extracted Data</span>
           <div class="d-flex gap-2 align-items-center">
             <input type="search" id="searchInput" class="form-control form-control-sm" placeholder="Search..." style="width:180px">
+            <select id="batchCategorySelect" class="form-select form-select-sm" style="width:auto">
+              <option value="">Batch category...</option>
+              <option value="RC">Responsabilité Civile</option>
+              <option value="AT">Accident du Travail</option>
+              <option value="AUTO">Automobile</option>
+              <option value="Habitation">Habitation</option>
+              <option value="Individuelle Accidents">Individuelle Accidents</option>
+              <option value="Schengen Visa">Schengen Visa</option>
+            </select>
             <button id="toggleFieldsBtn" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#fieldToggleModal">
               <i class="bi bi-eye"></i> Fields
             </button>

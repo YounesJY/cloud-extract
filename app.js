@@ -988,6 +988,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('searchInput').addEventListener('input', renderTable);
+
+  document.getElementById('batchCategorySelect').addEventListener('change', e => {
+    const cat = e.target.value;
+    if (!cat) return;
+    const count = state.contracts.length;
+    if (!confirm(`Set category to "${cat}" for all ${count} contracts?`)) {
+      e.target.value = '';
+      return;
+    }
+    state.contracts.forEach(c => c.category = cat);
+    saveToStorage();
+    renderTable();
+    showStatus(`All ${count} contracts set to "${cat}". Re-extract to apply field rules.`, 'info');
+    e.target.value = '';
+  });
 });
 
 // ===================== FILE HANDLING =====================
