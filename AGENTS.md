@@ -7,9 +7,9 @@ Web-based port of the C# "ContractProcessor" desktop app. Extracts structured da
 ## Stack
 
 - **Frontend**: Vanilla HTML/CSS/JS + Bootstrap 5.3.3
-- **PDF**: pdf.js (Mozilla) for text extraction + page rendering
+- **PDF**: pdf.js 3.11.174 (Mozilla) for text extraction + page rendering
 - **Export**: SheetJS (xlsx) + manual CSV
-- **Storage**: IndexedDB via Dexie.js (contracts, settings)
+- **Storage**: localStorage (contracts, settings) + IndexedDB (PDF binary cache)
 - **Server**: PowerShell `HttpListener` (no Python/Node — start.bat)
 
 ## Key Architecture Decisions
@@ -25,21 +25,40 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 
 ## Extraction Flow
 
-1. User uploads PDF(s) and selects category
+1. User uploads PDF(s) — binary stored in IndexedDB for session persistence
 2. pdf.js extracts text with spatial positioning (letter grouping by Y)
-3. Cleaned text sent to OpenRouter with category-specific prompt
-4. AI response parsed + cross-validated against PDF text via regex
-5. Results displayed in table, stored in IndexedDB
+3. AI auto-detects contract category (RC, AT, AUTO, etc.) from text
+4. Cleaned text sent to OpenRouter with category-specific prompt
+5. AI response parsed + cross-validated against PDF text via regex
+6. Results displayed in table, stored in localStorage
 
-## Field Categories
+## Models
 
-| Category | Specific Fields | Common Fields |
+| Model | Cost | Accuracy |
 |---|---|---|
-| AUTO | Immatriculation, Marque véhicule | Police Num, Souscripteur, Adresse, Dates, Téléphone, Code Intermédiaire, N° Client, CIN, Prime Totale TTC, Prime Nette, Taxes, Garanties, Montants Garantis, Franchises, Date de Naissance, Profession, Nom Assuré |
-| RC | (none extra) | Same common fields |
-| AT | (none extra) | Same common fields |
-| Habitation | (none extra) | Same common fields |
-| Individuelle Accidents | (none extra) | Same common fields |
+| DeepSeek V3 | ~$0.003/file | Best (recommended) |
+| GPT-4o Mini | ~$0.002/file | Good fallback |
+| GPT-4.1 Nano | ~$0.001/file | Cheapest OpenAI |
+| Gemini 2.0 Flash | Free | Basic |
+
+## Features
+
+### File Handling
+- Drag & drop + browse upload, PDF-only filter, 50MB limit
+- Duplicate detection, per-row delete button
+- PDF binary cached in IndexedDB (survives page reload)
+
+### Extraction
+- Auto-detect category via AI before extraction
+- OpenRouter AI with regex fallback
+- Parallel batch extraction via `Promise.allSettled`
+- Per-file re-extract button with spinner
+- Cross-validation: phone, CIN, dates, numeric, field sanity checks
+
+### Display
+- Dynamic table with per-row category dropdown
+- Field visibility toggles per category
+- XLSX/CSV export of visible columns
 
 ## Cross-Validation Rules (port from C#)
 
