@@ -188,6 +188,12 @@ body {
 [data-bs-theme="dark"] #resultsTable tbody tr:hover {
   background: rgba(13, 110, 253, 0.08);
 }
+[data-bs-theme="dark"] .modal-header {
+  background: var(--bs-body-bg);
+}
+[data-bs-theme="dark"] #pdfPreviewModal .modal-body {
+  background: #1a1d23;
+}
 
 /* ===================== Inline Editable Fields ===================== */
 .editable-field {
