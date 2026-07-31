@@ -1,8 +1,52 @@
 /* ===================== Layout ===================== */
+html {
+  height: 100%;
+}
 body {
   background: var(--bs-secondary-bg);
-  min-height: 100vh;
-  padding-bottom: 2rem;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fill viewport: navbar + app, no page scrollbar */
+.container-fluid.py-3 {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.container-fluid.py-3 > .row {
+  flex-shrink: 0;
+}
+.container-fluid.py-3 > .row.g-3 {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.container-fluid.py-3 > .row.g-3 > .col-md-12 {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.container-fluid.py-3 > .row.g-3 .card {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.container-fluid.py-3 > .row.g-3 .card-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.container-fluid.py-3 > .row.g-3 #resultsWrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ===================== Navbar ===================== */
@@ -79,9 +123,9 @@ body {
 
 /* ===================== Table ===================== */
 .table-wrap {
-  max-height: calc(100vh - 280px);
-  min-height: 200px;
-  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow: auto;
 }
 #resultsTable th {
   white-space: nowrap;
@@ -156,6 +200,20 @@ body {
   .container-fluid {
     padding-left: 10px;
     padding-right: 10px;
+  }
+  body {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .container-fluid.py-3 {
+    overflow: visible;
+  }
+  .container-fluid.py-3 > .row.g-3 .card {
+    flex: none;
+  }
+  .table-wrap {
+    min-height: 300px;
   }
 }
 
