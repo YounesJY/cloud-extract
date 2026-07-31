@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.5.0] — 2026-07-31
+
+### Added
+- Truncated prompts now always include the PRIME/pricing section (head 8000 chars + pricing tail, max 12000) — fixes missing prices on long Allianz contracts
+- Prompt NUMBERS rules for Allianz/Sanlam mashed tables:
+  - Math check: `Prime Totale TTC = Prime Nette + Taxes` — TTC must be ≥ Nette and ≥ Taxes
+  - Value-before-label examples (`1 411,20Prime nette`, `208,42208,42Taxes`, `Prime Total TTC 1 761,98`)
+  - Never treat `prime minimale` / franchise `minimum de X DH` as the total premium
+  - Taxes = the labeled "Taxes" amount only (not FSEC, événements catastrophiques, or accessoires)
+  - Round to at most 2 decimals (e.g. 208.4220842 → 208.42)
+- Dedicated regex pricing layer (`fillPriceFields`): label-first + value-before-label amount pairing, `Prime au comptant` fallback, plausibility checks, prime-minimale trap detection
+- AI failures now visible in the UI: Method badge shows "regex (AI fail)" with the error on hover; final status bar reports how many contracts fell back
+- `cleanLabeledValue`: strips label-prefix junk from Souscripteur/Adresse ("Nom et prénom ou raison sociale :", "intermédiaire :", "l'intermédiaire :", ...)
+
+### Changed
+- OpenRouter errors are no longer retried on 4xx statuses (401/402/403/404) — fail fast instead of 3 wasted attempts per file
+- Pricing fields (Prime Nette, Taxes, Prime Totale TTC) handled by the dedicated regex layer instead of generic patterns
+
+### Fixed
+- Allianz mashed tables where the amount appears before its label now extract correctly (RAZREV 1500/214.20/1817.15, FECM 6000/1200/7250, CHOUROUK 1000/142.80/1198, OUAHMANE 112.50/15.75/154.94)
+- "Prime minimale de 10 000 DH" no longer misread as the premium
+- Rounding artifacts from mashed text (208.4220842 → 208.42)
+
 ## [1.4.0] — 2026-07-30
 
 ### Added

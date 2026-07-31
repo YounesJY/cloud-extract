@@ -386,7 +386,9 @@ ${truncated}`;
 
       if (!resp.ok) {
         const errText = await resp.text();
-        throw new Error(`OpenRouter error ${resp.status}: ${errText}`);
+        const err = new Error(`OpenRouter error ${resp.status}: ${errText}`);
+        err.statusCode = resp.status;
+        throw err;
       }
 
       const data = await resp.json();
@@ -394,7 +396,9 @@ ${truncated}`;
       return parseJsonResponse(content, fieldNames);
     } catch (err) {
       lastErr = err;
-      if (attempt < maxRetries) {
+      const status = err && err.statusCode;
+      const noRetry = typeof status === 'number' && status >= 400 && status < 500;
+      if (!noRetry && attempt < maxRetries) {
         const delay = (attempt + 1) * 1000;
         console.warn(`OpenRouter attempt ${attempt + 1} failed, retrying in ${delay}ms:`, err.message);
         await new Promise(r => setTimeout(r, delay));
@@ -710,6 +714,7 @@ async function extractSingle(pdfData, fileName, category) {
   let fields = {};
   let rawResponse = '';
   let method = 'regex';
+  let aiError = '';
 
   if (state.apiKey && state.model) {
     try {
@@ -717,6 +722,7 @@ async function extractSingle(pdfData, fileName, category) {
       fields = result;
       method = 'OpenRouter';
     } catch (err) {
+      aiError = (err && err.message) ? err.message.slice(0, 300) : String(err);
       console.warn('OpenRouter failed, using regex fallback:', err);
     }
   }
@@ -731,7 +737,14 @@ async function extractSingle(pdfData, fileName, category) {
   crossValidateAndFill(fields, text);
   validateAndFix(fields);
 
-  return { fields, rawResponse, method, text, category };
+  return { fields, rawResponse, method, text, category, aiError };
+}
+
+function cleanLabeledValue(val) {
+  return val
+    .replace(/^(?:Nom\s*et\s*pr[eé]nom\s*ou\s*raison\s*sociale|Raison\s*sociale|D[eé]signation\s+(?:ou\s+nom)?|Nom)\s*:?\s*/i, '')
+    .replace(/^(?:de\s+)?(?:l['’\u2019])?interm[eé]diaire\s*:?\s*/i, '')
+    .trim();
 }
 
 function regexExtract(text, category) {
@@ -751,6 +764,9 @@ function regexExtract(text, category) {
     const match = text.match(pattern);
     if (match && match[1]) {
       let val = match[1].trim();
+      if (field === 'Souscripteur' || field === 'Adresse') {
+        val = cleanLabeledValue(val);
+      }
       if (val.length >= 2) fields[field] = val;
     }
   }
@@ -759,7 +775,7 @@ function regexExtract(text, category) {
   for (const extra of catExtra) {
     const pattern = new RegExp(`${extra}\\s*:?\\s*(.+)`, 'i');
     const match = text.match(pattern);
-    if (match && match[1]) fields[extra] = match[1].trim();
+    if (match && match[1]) fields[extra] = cleanLabeledValue(match[1]);
   }
 
   return fields;
@@ -1028,7 +1044,7 @@ function renderTable() {
       <td>${i + 1}</td>
       <td class="text-nowrap"><small>${esc(c.fileName)}</small></td>
       <td><select class="form-select form-select-sm cat-select" data-file="${esc(c.fileName)}" style="min-width:160px">${catOptions}</select></td>
-      <td><span class="badge bg-${c._extracting ? 'warning' : c.method === 'OpenRouter' ? 'success' : 'secondary'}">${c._extracting ? 'Extracting...' : esc(c.method)}</span></td>
+      <td><span class="badge bg-${c._extracting ? 'warning' : c.method === 'OpenRouter' ? 'success' : 'secondary'}" title="${c._extracting ? 'Extracting...' : c.aiError ? esc(c.aiError) : ''}">${c._extracting ? 'Extracting...' : c.aiError && c.method !== 'OpenRouter' ? 'regex (AI fail)' : esc(c.method)}</span></td>
       <td>${fields}</td>
       <td class="text-nowrap d-flex gap-1">
         <button class="btn btn-sm btn-outline-info preview-btn" data-file="${esc(c.fileName)}" title="Preview PDF"><i class="bi bi-eye"></i></button>
@@ -1090,6 +1106,7 @@ function renderTable() {
       contract.fields = result.fields;
       contract.category = result.category || contract.category;
       contract.method = result.method;
+      contract.aiError = result.aiError || '';
       saveToStorage();
       renderTable();
       showStatus(`Re-extraction complete: "${fileName}" (${result.method}).`, 'success');
@@ -1536,6 +1553,7 @@ async function runExtraction() {
         contract.fields = result.fields;
         contract.category = result.category || contract.category;
         contract.method = result.method;
+        contract.aiError = result.aiError || '';
       }
     } else {
       console.error('Extraction failed:', r.reason);
@@ -1547,7 +1565,11 @@ async function runExtraction() {
   renderTable();
   updateFieldToggleList();
 
-  showStatus(`Extraction complete. ${pending.filter(c => c.method === 'OpenRouter').length} AI, ${pending.filter(c => c.method === 'regex').length} regex.`, 'success');
+  const aiCount = pending.filter(c => c.method === 'OpenRouter').length;
+  const regexCount = pending.filter(c => c.method === 'regex').length;
+  const aiFailed = pending.filter(c => c.aiError).length;
+  const msg = `Extraction complete. ${aiCount} AI, ${regexCount} regex.` + (aiFailed ? ` ${aiFailed} used regex fallback because the AI API failed (hover the Method badge).` : '');
+  showStatus(msg, aiFailed ? 'warning' : 'success');
   updateExtractBtn();
   updatePdfSelector();
 }

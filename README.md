@@ -5,7 +5,7 @@ Web-based insurance contract data extraction tool. Upload Moroccan insurance PDF
 ## Features
 
 - **PDF Upload** — Drag & drop or file picker, batch upload with progress bar, 50MB limit
-- **AI Extraction** — Uses OpenRouter API (DeepSeek V3, GPT-4o Mini, GPT-4.1 Nano, or Gemini 2.0 Flash)
+- **AI Extraction** — Uses OpenRouter API (DeepSeek V3, GPT-4o Mini, GPT-4.1 Nano, or Gemini 2.0 Flash) with a regex fallback when AI fails
 - **Auto Category Detection** — AI classifies the document type before extraction
 - **Smart Validation** — Cross-references AI output with PDF text via regex
 - **PDF Preview** — Per-record modal with multi-page viewer, zoom (25%–400%), text selection, copy, and search
@@ -38,7 +38,7 @@ Client needs only: internet connection, a modern browser, and their own OpenRout
 ## Requirements
 
 - Modern browser (Chrome, Firefox, Edge)
-- OpenRouter API key (free tier available at https://openrouter.ai)
+- OpenRouter API key + a small credit balance (single contracts cost ~$0.001–0.003; add credits at https://openrouter.ai/settings/credits)
 - Local run: no Python, Node.js, or .NET — `start.bat` uses built-in Windows PowerShell
 
 ## Project Structure

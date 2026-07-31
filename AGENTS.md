@@ -29,6 +29,7 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 2. pdf.js extracts text with spatial positioning (letter grouping by Y)
 3. AI auto-detects contract category (RC, AT, AUTO, etc.) from text
 4. Cleaned text sent to OpenRouter with category-specific prompt
+   - Long texts are truncated (max 12000 chars) but always keep the head **and** the PRIME/pricing section
 5. AI response parsed + cross-validated against PDF text via regex
 6. Results displayed in sortable table, stored in localStorage
 
@@ -57,7 +58,9 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 
 ### Extraction
 - Auto-detect category via AI before extraction
-- OpenRouter AI with regex fallback
+- OpenRouter AI with regex fallback (`regexExtract`); pricing fields use a dedicated regex layer (`fillPriceFields`) with label-first + value-before-label amount pairing
+- AI API failures are surfaced in the UI: Method badge shows "regex (AI fail)" (error on hover), status bar reports fallback count
+- OpenRouter 4xx errors (401/402/403/404) are NOT retried — they fail fast
 - Parallel batch extraction via `Promise.allSettled`
 - Per-file re-extract button with spinner
 - Cross-validation: phone, CIN, dates, numeric, field sanity checks
@@ -99,6 +102,8 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - Nom Assuré: copy from Souscripteur if null
 - Date swap: if effet > échéance, swap them
 - Prime Totale TTC >= Prime Nette, swap if not
+- Pricing (`fillPriceFields`): TTC ≈ Nette + Taxes (math check); never use "prime minimale"/franchise minimum as TTC; Taxes = labeled "Taxes" only (not FSEC/catastrophiques/accessoires); round to ≤2 decimals
+- `cleanLabeledValue`: strips label-prefix junk ("Nom et prénom ou raison sociale :", "intermédiaire :") from Souscripteur/Adresse
 
 ## Build/Run
 
