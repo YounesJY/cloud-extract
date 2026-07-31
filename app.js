@@ -299,9 +299,24 @@ async function fetchFreeModels(apiKey) {
     .sort((a, b) => a.name?.localeCompare(b.name));
 }
 
+function buildPromptText(pdfText) {
+  if (!pdfText) return '';
+  const MAX = 12000;
+  if (pdfText.length <= MAX) return pdfText;
+  // Keep the beginning (identity fields) AND guarantee the PRIME/pricing section is included.
+  const head = pdfText.slice(0, 8000);
+  const primeRe = /^\s*(?:[IVX]{1,4}\s*[-–—:]\s*)?PRIME\s*:?\s*$/m;
+  const m = pdfText.match(primeRe);
+  if (m && m.index > 8000) {
+    const tail = pdfText.slice(m.index, Math.min(m.index + 4000, pdfText.length));
+    return head + '\n...\n' + tail;
+  }
+  return pdfText.slice(0, MAX);
+}
+
 async function callOpenRouter(pdfText, category) {
   const fieldNames = getFieldsForCategory(category);
-  const truncated = pdfText.length > 6000 ? pdfText.slice(0, 6000) + '...' : pdfText;
+  const truncated = buildPromptText(pdfText);
 
   const prompt = `Extract data from a Moroccan ${category} insurance contract (Allianz/Sanlam).
 
@@ -320,7 +335,16 @@ CRITICAL — Distinguish these codes carefully:
 NUMBERS (Prime Totale TTC, Prime Nette, Taxes):
 - Digits and dot only. NO currency (DH, MAD, dhs, €, $, Dirhams)
 - Convert comma to dot: "10.000,00" → "10000.00" (remove thousand separators)
-- Check the whole text carefully for these amounts.
+- MATH CHECK: Prime Totale TTC = Prime Nette + Taxes (+ small extras). TTC MUST be >= Prime Nette and >= Taxes. If your amounts break this, you picked the wrong numbers — re-read the text.
+- In Allianz/Sanlam tables the amount often appears BEFORE its label on the same line:
+  "1 411,20Prime nette"  → Prime Nette = 1411.20
+  "208,42208,42Taxes"    → Taxes = 208.42 (the same number may repeat twice — use one copy)
+  "Prime Total TTC 1 761,98 1 761,98" → Prime Totale TTC = 1761.98
+  "1 198,00Prime TTC (en DH) :" → Prime Totale TTC = 1198.00
+- The amount may also sit alone on the line just above or below its label — search nearby lines and pair each label with its nearest amount.
+- NEVER use "prime minimale", "prime minimale de 10 000", "Prime nette annuelle minimale" or a franchise "minimum de X DH" as Prime Totale TTC — those are minimums/floors, NOT the total premium.
+- Taxes = the amount labeled "Taxes" / "Taxes au comptant". Do NOT use "Taxe parafiscale FSEC", "Prime événements catastrophiques", or "Accessoires".
+- Round to at most 2 decimals (e.g. 208.4220842 is wrong — it is 208.42).
 
 DATES:
 - Date d'effet = START (earlier), Date d'échéance = END (later)
@@ -437,6 +461,11 @@ function validateAndFix(fields) {
       if (cleaned !== fields[field]) {
         fields[field] = cleaned;
       }
+      // Round over-precise values (model artifact from mashed text, e.g. "208.4220842") to 2 decimals
+      const f = parseFloat(fields[field]);
+      if (!isNaN(f) && Math.abs(f) > 0.0005 && String(fields[field]).replace(/\s/g, '').match(/[.,](\d+)/)?.[1].length > 2) {
+        fields[field] = String(Math.round(f * 100) / 100);
+      }
     }
   }
 
@@ -500,14 +529,11 @@ function crossValidateAndFill(fields, pdfText) {
     }
   }
 
-  // 2. Regex-fill null fields
+  // 2. Regex-fill null fields (non-price fields)
   const patterns = {
     "N° Client": /N[°o]\s*Client\s*:?\s*([A-Z0-9\-/]{3,20})/i,
     "CIN": /(?:N[°o]\s+CIN\b|CIN\s*:|Carte\s+identité)\s*:?\s*([A-Z]{1,2}\d{4,10})/i,
     "Téléphone": /(?:T[eé]l[eé]?phone|Tél|Mobile)\s*:?\s*([\d\s\-+]{8,15})/i,
-    "Prime Totale TTC": /(?:Prime\s*Totale\s*TTC|Total\s*TTC|Net\s*à\s*payer)\s*:?\s*([\d\s,.]+)\s*(?:DH|MAD|dhs)?/i,
-    "Prime Nette": /(?:Prime\s*Nette|Prime\s*Hors\s*[Tt]axe|Prime\s*pure)\s*:?\s*([\d\s,.]+)\s*(?:DH|MAD|dhs)?/i,
-    "Taxes": /Taxes?\s*:?\s*([\d\s,.]+)\s*(?:DH|MAD|dhs)?/i,
     "Code Intermédiaire": /Code\s*Int[eé]rm[eé]diaire\s*:?\s*(\d{4,10})/i
   };
 
@@ -520,6 +546,9 @@ function crossValidateAndFill(fields, pdfText) {
       }
     }
   }
+
+  // 2b. Price fields: fill nulls or override implausible values (Allianz mashed tables)
+  fillPriceFields(fields, fullText);
 
   // 3. Code Intermédiaire: fix long descriptions
   if (fields['Code Intermédiaire'] && (fields['Code Intermédiaire'].length > 15 || fields['Code Intermédiaire'].toUpperCase().includes('ALLIANZ'))) {
@@ -544,6 +573,94 @@ function crossValidateAndFill(fields, pdfText) {
       delete fields['Téléphone'];
     }
   }
+}
+
+// ===================== PRICE REGEX FILL (Allianz mashed tables) =====================
+function toNum(raw) {
+  if (raw == null) return NaN;
+  let s = String(raw).replace(/\b(DH|MAD|dhs|Dhs|dh|€|\$|EUR|USD)\b/gi, '');
+  s = s.replace(/(\d)\s+(?=\d)/g, '$1');
+  s = s.replace(',', '.');
+  s = s.replace(/[^0-9.\-]/g, '');
+  return parseFloat(s);
+}
+
+function priceIsPlausible(field, val, fields) {
+  if (isNaN(val) || val < 0) return false;
+  const nette = toNum(fields['Prime Nette']);
+  const taxes = toNum(fields['Taxes']);
+  const ttc = toNum(fields['Prime Totale TTC']);
+  if (field === 'Prime Totale TTC') {
+    if (!isNaN(nette) && nette > 0 && val < nette) return false;
+    if (!isNaN(nette) && !isNaN(taxes) && nette > 0 && taxes > 0 && val < nette + taxes) return false;
+    return true;
+  }
+  if (field === 'Prime Nette') {
+    if (!isNaN(ttc) && ttc > 0 && val > ttc) return false;
+    if (!isNaN(ttc) && ttc > 0 && val < ttc * 0.1) return false;
+    return true;
+  }
+  if (field === 'Taxes') {
+    if (!isNaN(ttc) && ttc > 0 && val > ttc) return false;
+    return true;
+  }
+  return true;
+}
+
+function fillPriceFields(fields, fullText) {
+  // Number pattern for one French-format amount: "1 411,20", "208,42", "7 250,00", "1761,98"
+  // (thousands separator may be space, NBSP, dot, or comma — or absent)
+  const AMT = '(?:\\d{1,3}(?:[ ,.\\u00A0]\\d{3})*(?:,\\d{1,2})?|\\d{4,6}(?:,\\d{1,2})?)';
+
+  const strongTtc = [
+    /(?:Prime\s*Totale\s*TTC|Prime\s*Total\s*TTC|Total\s*TTC|Prime\s*TTC|Net\s*à\s*payer)\s*:?\s*([\d\s,.]+)\s*(?:DH|MAD|dhs)?/i,
+    new RegExp(`(${AMT})\\s{0,2}(?:DH|MAD|dhs)?\\s{0,2}Prime\\s*(?:Totale\\s*)?TTC\\b`, 'i')
+  ];
+  const netteRe = [
+    /(?:Prime\s*Nette|Prime\s*Hors\s*[Tt]axe|Prime\s*pure)\s*:?\s*([\d\s,.]+)\s*(?:DH|MAD|dhs)?/i,
+    new RegExp(`(${AMT})\\s{0,2}(?:DH|MAD|dhs)?\\s{0,2}Prime\\s*[Nn]ette\\b`, 'i')
+  ];
+  const taxesRe = [
+    /(?:Taxes\s*au\s*comptant|Taxes?\b(?!\s*parafiscale))\s*:?\s*([\d\s,.]+)\s*(?:DH|MAD|dhs)?/i,
+    new RegExp(`(${AMT})\\s{0,2}(?:DH|MAD|dhs)?\\s{0,2}Taxes?\\b(?!\\s*parafiscale)`, 'i')
+  ];
+  const auComptantRe = [
+    new RegExp(`Prime\\s*au\\s*comptant\\s*(?:\\([^)]*\\))?\\s*:?\\s*(${AMT})`, 'i'),
+    new RegExp(`(${AMT})\\s{0,2}(?:DH|MAD|dhs)?\\s{0,2}Prime\\s*au\\s*comptant\\b`, 'i')
+  ];
+
+  const isTtcTrap = () => {
+    const cur = toNum(fields['Prime Totale TTC']);
+    if (isNaN(cur)) return false;
+    const trap = fullText.match(new RegExp(`(?:minimum|minimale|minimal)\\s+de\\s*(${AMT})`, 'i'));
+    return !!trap && !isNaN(toNum(trap[1])) && Math.abs(toNum(trap[1]) - cur) < 0.01;
+  };
+
+  const fill = (field, regexes) => {
+    const current = toNum(fields[field]);
+    const plausible = priceIsPlausible(field, current, fields);
+    const trapped = field === 'Prime Totale TTC' && isTtcTrap();
+    if (fields[field] && plausible && !trapped) return;
+    for (const re of regexes) {
+      const m = fullText.match(re);
+      if (!m || m[1] == null) continue;
+      const cand = toNum(m[1]);
+      if (!priceIsPlausible(field, cand, fields)) continue;
+      fields[field] = String(Math.round(cand * 100) / 100);
+      return;
+    }
+  };
+
+  const trappedTtc = isTtcTrap();
+  // Stage 1: reliable "Prime TTC" labels (label-first or mashed value-first)
+  fill('Prime Totale TTC', strongTtc);
+  // Stage 2: "Prime au comptant" = total payable (fees+taxes included) — used when no reliable TTC label
+  if (!fields['Prime Totale TTC'] || trappedTtc || !priceIsPlausible('Prime Totale TTC', toNum(fields['Prime Totale TTC']), fields)) {
+    fill('Prime Totale TTC', auComptantRe);
+  }
+  // Stage 3: nette & taxes with TTC as anchor
+  fill('Prime Nette', netteRe);
+  fill('Taxes', taxesRe);
 }
 
 // ===================== EXTRACTION PIPELINE =====================
