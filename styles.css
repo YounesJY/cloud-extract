@@ -3,6 +3,7 @@ body {
   background: var(--bs-secondary-bg);
   min-height: 100vh;
   padding-bottom: 2rem;
+  min-width: max-content;
 }
 
 /* ===================== Navbar ===================== */
