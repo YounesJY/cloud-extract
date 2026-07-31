@@ -84,9 +84,6 @@ body {
 #resultsTable th {
   white-space: nowrap;
   font-size: 0.78rem;
-  position: sticky;
-  top: 56px;
-  z-index: 3;
   background: var(--bs-dark);
   color: #fff;
   padding: 0.5rem 0.4rem;
