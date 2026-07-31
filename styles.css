@@ -80,7 +80,6 @@ body {
 /* ===================== Table ===================== */
 .table-wrap {
   min-height: 120px;
-  overflow-x: auto;
 }
 #resultsTable {
   border-collapse: collapse;
@@ -94,6 +93,9 @@ body {
 #resultsTable th {
   white-space: nowrap;
   font-size: 0.78rem;
+  position: sticky;
+  top: 56px;
+  z-index: 100;
   background: var(--bs-dark);
   color: #fff;
   padding: 0.5rem 0.4rem;
