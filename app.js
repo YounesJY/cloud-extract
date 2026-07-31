@@ -1516,6 +1516,47 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// Report issue — opens a pre-filled GitHub issue with the current contract context
+document.addEventListener('DOMContentLoaded', () => {
+  const link = document.getElementById('reportIssueBtn');
+  if (!link) return;
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const sel = document.getElementById('pdfSelector');
+    const fileName = (sel && sel.value) || (state.contracts[0] || {}).fileName || '';
+    const contract = state.contracts.find(c => c.fileName === fileName) || {};
+    const method = contract.method || 'not extracted';
+    const aiErr = contract.aiError ? `\n\n**AI error:** \`${contract.aiError}\`` : '';
+    const fields = Object.entries(contract.fields || {})
+      .map(([k, v]) => `- ${k}: ${String(v).slice(0, 120)}`)
+      .join('\n').slice(0, 2500) || '(no fields extracted)';
+    const title = encodeURIComponent(`Issue: ${fileName || 'Cloud Extract'} (${method})`);
+    const body = encodeURIComponent(
+`## What happened?
+<!-- Describe the problem or leave feedback -->
+
+
+## Context
+- **File:** ${fileName || '—'}
+- **Category:** ${contract.category || '—'}
+- **Method:** ${method}
+- **App version:** 1.5.0
+${aiErr}
+
+## Extracted fields
+${fields}
+
+## Steps to reproduce
+1. 
+2. 
+3. 
+`
+    );
+    link.href = `https://github.com/YounesJY/cloud-extract/issues/new?title=${title}&body=${body}`;
+    window.open(link.href, '_blank', 'noopener');
+  });
+});
+
 async function runExtraction() {
   const extractBtn = document.getElementById('extractBtn');
   extractBtn.disabled = true;
