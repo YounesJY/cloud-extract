@@ -80,6 +80,16 @@ body {
 /* ===================== Table ===================== */
 .table-wrap {
   min-height: 120px;
+  overflow-x: auto;
+}
+#resultsTable {
+  border-collapse: collapse;
+}
+#resultsTable thead {
+  display: table-header-group;
+}
+#resultsTable tbody {
+  display: table-row-group;
 }
 #resultsTable th {
   white-space: nowrap;
