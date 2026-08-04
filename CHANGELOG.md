@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.0] — 2026-08-04
+
+### Added
+- **Per-record extraction**: each not-yet-extracted row now has its own "Extract" button (replaces the re-extract icon for pending rows) so a single PDF can be processed without running the whole batch
+- **Price second-pass**: when `Prime Totale TTC` does not reconcile with `Prime Nette + Taxes`, the app re-asks the model (temperature 0) for just those three fields before flagging the row "review"
+
+### Changed
+- Determinism: extraction temperature lowered from 0.1 to 0 to stop fields flapping between runs
+- Prompt hardening: per-guarantee amounts must be paired with their own labels (CHARI "Bris d'enseignes 10 000,00" → 10000.00, never 0.00); for "personne morale" contracts Souscripteur/Nom Assuré = the Raison sociale, not the conducteur individuel; Profession always filled when present; dates cross-checked against "Date d'effet"/"Date d'échéance" labels
+
 ## [1.6.2] — 2026-08-04
 
 ### Fixed

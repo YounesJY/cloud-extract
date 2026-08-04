@@ -353,11 +353,17 @@ DATES:
 - Date d'effet = START (earlier), Date d'échéance = END (later)
 - CRITICAL: effet date MUST be earlier than échéance — swap if reversed
 - Format: DD/MM/YYYY only
+- When the text shows a date range spanning roughly one year, the earlier date is the effet and the later is the échéance. Beware pypdf column scrambling: verify dates against adjacent labels ("Date d'effet", "Date d'échéance", "Renouvelable").
 
 PHONE:
 - 10-digit Moroccan number starting with 0 (e.g. 0522499700)
 - Digits only: remove spaces, +212, parentheses, hyphens
 - If you see 9 digits, add leading 0
+
+MONTANTS GARANTIS (per-guarantee amounts):
+- Output amounts in the SAME ORDER as the Garanties list, one value per guarantee, comma-separated.
+- Pair each amount with its own guarantee label. Example: "Bris d'enseignes | 10 000,00" → 10000.00, NOT 0.00. A trailing "0,00" next to a Garanti/Non-Garanti checkbox is NOT the amount.
+- Never output 0.00 for a guarantee that has a real value.
 
 NAMES (Souscripteur, Nom Assuré): UPPERCASE
 For ${category} contracts, Nom Assuré is often the same company as Souscripteur
@@ -365,12 +371,47 @@ For ${category} contracts, Nom Assuré is often the same company as Souscripteur
   e.g. "Mme Mlle M. X Sté" followed by "CHARI DONIA" → "CHARI DONIA" (NOT "STÉCHARI DONIA"),
   "Sté" is a checkbox label meaning société, never part of the person's name.
 - Only keep a legal suffix (SARL, SA, S.A.R.L) if it is actually part of the written company name.
+- When the contract lists a company as "personne morale / Raison sociale" AND a separate individual "Nom et Prénom" (e.g. conducteur habituel), Souscripteur/Nom Assuré = the Raison sociale (the company), NOT the individual.
+- Profession: always fill it when present (e.g. "CABINET DENTAIRE", "ENTREPRISE CONSTRUCTION"), even if it appears after the address.
 
 Return ONLY the JSON object — no markdown, no explanation, no extra text.
 
 Contract text:
 ${truncated}`;
 
+  return openRouterRequest(prompt, fieldNames, 2000, 0);
+}
+
+// Second-pass: when the price math check fails, ask the model to focus ONLY on the
+// three price fields and fix them from the contract text (temperature 0).
+async function recheckPrices(fields, text, category) {
+  const fieldNames = ['Prime Totale TTC', 'Prime Nette', 'Taxes'];
+  const current = fieldNames.map(f => `${f}: ${fields[f] != null ? fields[f] : 'null'}`).join('\n');
+  const prompt = `A Moroccan ${category} insurance contract (Allianz/Sanlam) was already partially extracted, but the amounts do NOT reconcile (Prime Totale TTC should equal Prime Nette + Taxes).
+
+Current (possibly wrong) values:
+${current}
+
+From the contract text below, determine the CORRECT Prime Totale TTC, Prime Nette and Taxes.
+Rules:
+- Digits and dot only. No currency. Convert "10.000,00" → "10000.00".
+- Prime Nette comes from the DÉCOMPTE DE PRIME À PAYER section, NEVER the "Total" row of the garanties table.
+- Taxes = the labeled "Taxes"/"Taxes au comptant" amount ALONE (never add FSEC on top). Only when there is no such label, use FSEC (sum FSEC + NARSA when both exist).
+- Prime Totale TTC must be >= Prime Nette and >= Taxes.
+
+Return EXACTLY this JSON with these EXACT keys (use null if a value is genuinely absent):
+${JSON.stringify(Object.fromEntries(fieldNames.map(f => [f, 'value'])), null, 2)}
+
+Return ONLY the JSON object — no markdown, no extra text.
+
+Contract text:
+${buildPromptText(text)}`;
+
+  const result = await openRouterRequest(prompt, fieldNames, 1000, 0);
+  return Object.keys(result).length ? result : null;
+}
+
+async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperature = 0) {
   const maxRetries = 2;
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -386,8 +427,8 @@ ${truncated}`;
         body: JSON.stringify({
           model: state.model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-          max_tokens: 2000
+          temperature,
+          max_tokens: maxTokens
         })
       });
 
@@ -791,7 +832,29 @@ async function extractSingle(pdfData, fileName, category) {
   crossValidateAndFill(fields, text);
   validateAndFix(fields);
 
-  const priceWarning = !checkPriceConsistency(fields, text);
+  let priceWarning = !checkPriceConsistency(fields, text);
+
+  // Second-pass: re-ask for just the price fields when they don't reconcile
+  if (priceWarning && method === 'OpenRouter' && state.apiKey && state.model) {
+    try {
+      const fix = await recheckPrices(fields, text, category);
+      if (fix) {
+        let changed = false;
+        for (const f of ['Prime Totale TTC', 'Prime Nette', 'Taxes']) {
+          if (fix[f] && fix[f] !== fields[f]) {
+            fields[f] = fix[f];
+            changed = true;
+          }
+        }
+        if (changed) {
+          validateAndFix(fields);
+          priceWarning = !checkPriceConsistency(fields, text);
+        }
+      }
+    } catch (err) {
+      console.warn('Price recheck failed, keeping first-pass values:', err.message);
+    }
+  }
 
   return { fields, rawResponse, method, text, category, aiError, priceWarning };
 }
@@ -1104,7 +1167,7 @@ function renderTable() {
       <td>${fields}</td>
       <td class="text-nowrap d-flex gap-1">
         <button class="btn btn-sm btn-outline-info preview-btn" data-file="${esc(c.fileName)}" title="Preview PDF"><i class="bi bi-eye"></i></button>
-        <button class="btn btn-sm btn-outline-secondary reextract-btn" data-file="${esc(c.fileName)}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>
+        ${c.method === 'OpenRouter' ? `<button class="btn btn-sm btn-outline-secondary reextract-btn" data-file="${esc(c.fileName)}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>` : `<button class="btn btn-sm btn-primary extract-one-btn" data-file="${esc(c.fileName)}" title="Extract this record"><i class="bi bi-magic"></i> Extract</button>`}
         <button class="btn btn-sm btn-outline-danger delete-btn" data-file="${esc(c.fileName)}" title="Remove"><i class="bi bi-x-lg"></i></button>
       </td>
     </tr>`;
@@ -1144,7 +1207,7 @@ function renderTable() {
       return;
     }
 
-    const reBtn = e.target.closest('.reextract-btn');
+    const reBtn = e.target.closest('.reextract-btn') || e.target.closest('.extract-one-btn');
     if (!reBtn || reBtn.disabled) return;
     const fileName = reBtn.dataset.file;
     const contract = state.contracts.find(c => c.fileName === fileName);
