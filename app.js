@@ -699,6 +699,11 @@ function checkPriceConsistency(fields, fullText) {
   const nette = toNum(fields['Prime Nette']);
   const taxes = toNum(fields['Taxes']);
   if (isNaN(ttc) || isNaN(nette) || ttc <= 0 || nette <= 0) return true;
+  // Trap: Prime Nette must not be the "Total" row of the garanties/primes table
+  if (fullText) {
+    const totalM = fullText.match(/Total\s+([\d\s.,]+)/i);
+    if (totalM && !isNaN(toNum(totalM[1])) && Math.abs(toNum(totalM[1]) - nette) < 0.01) return false;
+  }
   const gap = Math.abs(ttc - nette - (isNaN(taxes) ? 0 : taxes));
   if (gap <= Math.max(1, ttc * 0.05)) return true;
   if (fullText && /Accessoires\b/i.test(fullText) && gap <= ttc * 0.2) return true;
