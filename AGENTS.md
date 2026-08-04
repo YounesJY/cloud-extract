@@ -73,7 +73,7 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - Drag-and-drop field reordering (persistent order)
 - Inline editable fields (click to edit, Enter or blur to save)
 - Scrollable table body (fills viewport: calc(100vh - 280px))
-- XLSX/CSV export of visible columns
+- XLSX/CSV export of visible columns, with a leading "File Name" column
 
 ### Settings
 - API key with show/hide toggle
@@ -104,6 +104,9 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - Prime Totale TTC >= Prime Nette, swap if not
 - Pricing (`fillPriceFields`): TTC ≈ Nette + Taxes (math check); never use "prime minimale"/franchise minimum as TTC; Taxes = labeled "Taxes" only (not FSEC/catastrophiques/accessoires); round to ≤2 decimals
 - `cleanLabeledValue`: strips label-prefix junk ("Nom et prénom ou raison sociale :", "intermédiaire :") from Souscripteur/Adresse
+- Téléphone hygiene: insurer/intermediary boilerplate numbers and dummy patterns (0600000000) are dropped
+- Placeholder-only Police Num (literal ".....") and `N?`→`N°` OCR artifacts are cleaned
+- `checkPriceConsistency` flags rows where TTC ≠ Nette + Taxes beyond tolerance (shown as a "review" badge)
 
 ## Build/Run
 

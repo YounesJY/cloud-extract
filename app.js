@@ -343,7 +343,7 @@ NUMBERS (Prime Totale TTC, Prime Nette, Taxes):
   "1 198,00Prime TTC (en DH) :" → Prime Totale TTC = 1198.00
 - The amount may also sit alone on the line just above or below its label — search nearby lines and pair each label with its nearest amount.
 - NEVER use "prime minimale", "prime minimale de 10 000", "Prime nette annuelle minimale" or a franchise "minimum de X DH" as Prime Totale TTC — those are minimums/floors, NOT the total premium.
-- Taxes = the amount labeled "Taxes" / "Taxes au comptant". Do NOT use "Taxe parafiscale FSEC", "Prime événements catastrophiques", or "Accessoires".
+- Taxes = the amount labeled "Taxes" / "Taxes au comptant" IF such a label exists (Allianz/Sanlam contracts). If there is NO "Taxes" label, use the "Taxe parafiscale au profit du FSEC" line instead. If several tax lines exist (e.g. FSEC + Taxe NARSA), return their SUM. Never use "Prime événements catastrophiques" or "Accessoires"/"Assistance" as Taxes.
 - Round to at most 2 decimals (e.g. 208.4220842 is wrong — it is 208.42).
 
 DATES:
@@ -503,6 +503,27 @@ function validateAndFix(fields) {
     }
     if (digits.length >= 10) {
       fields['Téléphone'] = digits.slice(-10);
+    }
+  }
+
+  // Phone hygiene: drop insurer boilerplate numbers and dummy placeholders (not the client's phone)
+  if (fields['Téléphone']) {
+    const digits = fields['Téléphone'].replace(/\D/g, '');
+    const insurerPhones = ['0522499700', '0522420606', '0801001818', '0522225521', '0522957575'];
+    if (insurerPhones.includes(digits) || /^060+$/.test(digits) || /^0{10}$/.test(digits)) {
+      delete fields['Téléphone'];
+    }
+  }
+
+  // Police Num: strip placeholder-only values (PDFs with literal "....." fields)
+  if (fields['Police Num'] && /^[.\-—_•\s]+$/.test(fields['Police Num'])) {
+    delete fields['Police Num'];
+  }
+
+  // Normalize mangled degree sign (OCR artifact "N?12" -> "N°12")
+  for (const field of ['Adresse', 'Souscripteur', 'Nom Assuré', 'Profession']) {
+    if (fields[field] && fields[field].includes('N?')) {
+      fields[field] = fields[field].replace(/N\?(\d)/g, 'N°$1');
     }
   }
 }
@@ -667,6 +688,20 @@ function fillPriceFields(fields, fullText) {
   fill('Taxes', taxesRe);
 }
 
+// Math check: TTC should ≈ Nette + Taxes. Returns true when consistent.
+// Allianz/Sanlam contracts legitimately add Accessoires/FSEC/catastrophiques on top,
+// so rows with an "Accessoires" line in the text are trusted unless the gap is extreme.
+function checkPriceConsistency(fields, fullText) {
+  const ttc = toNum(fields['Prime Totale TTC']);
+  const nette = toNum(fields['Prime Nette']);
+  const taxes = toNum(fields['Taxes']);
+  if (isNaN(ttc) || isNaN(nette) || ttc <= 0 || nette <= 0) return true;
+  const gap = Math.abs(ttc - nette - (isNaN(taxes) ? 0 : taxes));
+  if (gap <= Math.max(1, ttc * 0.05)) return true;
+  if (fullText && /Accessoires\b/i.test(fullText) && gap <= ttc * 0.2) return true;
+  return false;
+}
+
 // ===================== EXTRACTION PIPELINE =====================
 async function detectCategory(text) {
   if (!state.apiKey || !state.model) return null;
@@ -737,7 +772,9 @@ async function extractSingle(pdfData, fileName, category) {
   crossValidateAndFill(fields, text);
   validateAndFix(fields);
 
-  return { fields, rawResponse, method, text, category, aiError };
+  const priceWarning = !checkPriceConsistency(fields, text);
+
+  return { fields, rawResponse, method, text, category, aiError, priceWarning };
 }
 
 function cleanLabeledValue(val) {
@@ -805,7 +842,7 @@ function exportToCsv(contracts, columns) {
 
 function buildExportData(contracts, columns) {
   return contracts.map(c => {
-    const row = {};
+    const row = { 'File Name': c.fileName || '' };
     for (const col of columns) {
       row[col] = c.fields[col] || '';
     }
@@ -1044,7 +1081,7 @@ function renderTable() {
       <td>${i + 1}</td>
       <td class="text-nowrap"><small>${esc(c.fileName)}</small></td>
       <td><select class="form-select form-select-sm cat-select" data-file="${esc(c.fileName)}" style="min-width:160px">${catOptions}</select></td>
-      <td><span class="badge bg-${c._extracting ? 'warning' : c.method === 'OpenRouter' ? 'success' : 'secondary'}" title="${c._extracting ? 'Extracting...' : c.aiError ? esc(c.aiError) : ''}">${c._extracting ? 'Extracting...' : c.aiError && c.method !== 'OpenRouter' ? 'regex (AI fail)' : esc(c.method)}</span></td>
+      <td><span class="badge bg-${c._extracting ? 'warning' : c.method === 'OpenRouter' ? 'success' : 'secondary'}" title="${c._extracting ? 'Extracting...' : c.aiError ? esc(c.aiError) : ''}">${c._extracting ? 'Extracting...' : c.aiError && c.method !== 'OpenRouter' ? 'regex (AI fail)' : esc(c.method)}</span>${!c._extracting && c.method !== 'error' && c.priceWarning ? ' <span class="badge bg-warning text-dark" title="TTC does not match Nette + Taxes — verify manually">review</span>' : ''}</td>
       <td>${fields}</td>
       <td class="text-nowrap d-flex gap-1">
         <button class="btn btn-sm btn-outline-info preview-btn" data-file="${esc(c.fileName)}" title="Preview PDF"><i class="bi bi-eye"></i></button>
@@ -1107,6 +1144,7 @@ function renderTable() {
       contract.category = result.category || contract.category;
       contract.method = result.method;
       contract.aiError = result.aiError || '';
+      contract.priceWarning = result.priceWarning || false;
       saveToStorage();
       renderTable();
       showStatus(`Re-extraction complete: "${fileName}" (${result.method}).`, 'success');
@@ -1595,6 +1633,7 @@ async function runExtraction() {
         contract.category = result.category || contract.category;
         contract.method = result.method;
         contract.aiError = result.aiError || '';
+        contract.priceWarning = result.priceWarning || false;
       }
     } else {
       console.error('Extraction failed:', r.reason);

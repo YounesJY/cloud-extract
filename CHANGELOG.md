@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.6.0] — 2026-08-04
+
+### Added
+- Export CSV/XLSX now includes a leading **File Name** column so each row is traceable to its source PDF
+- "review" warning badge on rows where `Prime Totale TTC` does not match `Prime Nette + Taxes` (with tolerance for legit Accessoires/FSEC/catastrophiques extras) — hover for details
+
+### Changed
+- Prompt Taxes rule: use labeled "Taxes"/"Taxes au comptant" if present, otherwise the Taxe FSEC line; sum multiple tax lines (FSEC + NARSA)
+- Téléphone hygiene: insurer/intermediary boilerplate numbers (0522499700, 0522420606, 0801001818, 0522957575, ...) and dummy patterns (0600000000) are dropped — field stays empty when the PDF has no client phone
+- Placeholder-only Police Num values (PDFs with literal "....." fields) are dropped instead of exported
+
+### Fixed
+- D2A auto contract: Taxes was picking only the NARSA tax line; now the FSEC tax (or sum) is used
+- OCR artifact `N?12` normalized to `N°12` in addresses/names
+
 ## [1.5.0] — 2026-07-31
 
 ### Added
