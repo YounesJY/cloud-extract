@@ -343,7 +343,10 @@ NUMBERS (Prime Totale TTC, Prime Nette, Taxes):
   "1 198,00Prime TTC (en DH) :" → Prime Totale TTC = 1198.00
 - The amount may also sit alone on the line just above or below its label — search nearby lines and pair each label with its nearest amount.
 - NEVER use "prime minimale", "prime minimale de 10 000", "Prime nette annuelle minimale" or a franchise "minimum de X DH" as Prime Totale TTC — those are minimums/floors, NOT the total premium.
-- Taxes = the amount labeled "Taxes" / "Taxes au comptant" IF such a label exists (Allianz/Sanlam contracts). If there is NO "Taxes" label, use the "Taxe parafiscale au profit du FSEC" line instead. If several tax lines exist (e.g. FSEC + Taxe NARSA), return their SUM. Never use "Prime événements catastrophiques" or "Accessoires"/"Assistance" as Taxes.
+- Prime Nette: use the amount in the DÉCOMPTE DE PRIME À PAYER / payment section. NEVER use the "Total" row at the bottom of the garanties/primes table (e.g. "Total 4 760,70") as Prime Nette — use the nette inside the décompte (e.g. "4 409,05").
+- Taxes = the labeled "Taxes"/"Taxes au comptant" amount, ALONE. Do NOT add "Taxe parafiscale FSEC" or anything else on top of it (e.g. "Taxes au comptant : 99,79" plus "Taxe parafiscale FSEC : 10,69" → Taxes = 99.79, NOT 110.48).
+- ONLY if there is NO "Taxes"/"Taxes au comptant" label anywhere: use the "Taxe parafiscale au profit du FSEC" amount; when several tax lines exist (FSEC + Taxe NARSA), return their SUM (e.g. 773,09 + 115,74 = 888,83).
+- Never use "Prime événements catastrophiques" or "Accessoires"/"Assistance" as Taxes.
 - Round to at most 2 decimals (e.g. 208.4220842 is wrong — it is 208.42).
 
 DATES:

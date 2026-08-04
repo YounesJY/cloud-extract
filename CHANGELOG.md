@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.1] — 2026-08-04
+
+### Fixed
+- Prompt overcorrection: model was adding the Taxe FSEC line on top of the labeled "Taxes au comptant" (e.g. EL HADRI 110.48 = 99.79 + 10.69). Rule now: use the labeled Taxes amount ALONE; only sum FSEC + NARSA when no "Taxes" label exists (D2A-style)
+- Prime Nette: clarified to use the DÉCOMPTE section value, never the garanties table "Total" (fixes D2A picking 4760.70 instead of 4409.05)
+
 ## [1.6.0] — 2026-08-04
 
 ### Added
