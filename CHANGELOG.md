@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.2] — 2026-08-04
+
+### Fixed
+- Prompt rule added for **Franchises**: always extract the "minimum de X DH" / "X% du montant des dommages" clauses from the Franchise column (fixes CHARI losing its franchises)
+
 ## [1.7.1] — 2026-08-04
 
 ### Added

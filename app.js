@@ -365,6 +365,11 @@ MONTANTS GARANTIS (per-guarantee amounts):
 - Pair each amount with its own guarantee label. Example: "Bris d'enseignes | 10 000,00" → 10000.00, NOT 0.00. A trailing "0,00" next to a Garanti/Non-Garanti checkbox is NOT the amount.
 - Never output 0.00 for a guarantee that has a real value.
 
+FRANCHISES:
+- Franchises are the "minimum de X DH" / "X% du montant des dommages" clauses in the guarantee table's Franchise column, or a "Franchise" section.
+- Example: "Franchise | 15% du montant des dommages avec un minimum de 10 000 DH | Franchise | 15% du montant des dommages avec un minimum de 20 000 DH" → "15% du montant des dommages avec un minimum de 10000 DH, 15% du montant des dommages avec un minimum de 20000 DH".
+- If the contract has franchise clauses, ALWAYS fill Franchises — do not leave it empty.
+
 NAMES (Souscripteur, Nom Assuré): UPPERCASE
 For ${category} contracts, Nom Assuré is often the same company as Souscripteur
 - Output the name exactly as written. Do NOT merge checkbox/civil-status labels into the name:
