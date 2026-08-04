@@ -910,6 +910,10 @@ function exportToXlsx(contracts, columns) {
 }
 
 function exportToCsv(contracts, columns) {
+  exportToCsvNamed(contracts, columns, `export_${new Date().toISOString().slice(0,19).replace(/[:-]/g, '')}.csv`);
+}
+
+function exportToCsvNamed(contracts, columns, downloadName) {
   const data = buildExportData(contracts, columns);
   const ws = XLSX.utils.json_to_sheet(data);
   const csv = XLSX.utils.sheet_to_csv(ws);
@@ -917,9 +921,15 @@ function exportToCsv(contracts, columns) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `export_${new Date().toISOString().slice(0,19).replace(/[:-]/g, '')}.csv`;
+  a.download = downloadName;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function exportSingleContract(contract) {
+  const columns = [...state.visibleFields].filter(f => contract.fields[f]);
+  const base = (contract.fileName || 'export').replace(/\.pdf$/i, '').replace(/[\\/:*?"<>|]/g, '_');
+  exportToCsvNamed([contract], columns, `${base}.csv`);
 }
 
 function buildExportData(contracts, columns) {
@@ -1168,6 +1178,7 @@ function renderTable() {
       <td class="text-nowrap d-flex gap-1">
         <button class="btn btn-sm btn-outline-info preview-btn" data-file="${esc(c.fileName)}" title="Preview PDF"><i class="bi bi-eye"></i></button>
         ${c.method === 'OpenRouter' ? `<button class="btn btn-sm btn-outline-secondary reextract-btn" data-file="${esc(c.fileName)}" title="Re-extract"><i class="bi bi-arrow-clockwise"></i></button>` : `<button class="btn btn-sm btn-primary extract-one-btn" data-file="${esc(c.fileName)}" title="Extract this record"><i class="bi bi-magic"></i> Extract</button>`}
+        <button class="btn btn-sm btn-outline-success export-one-btn" data-file="${esc(c.fileName)}" title="Export this record to CSV"><i class="bi bi-download"></i></button>
         <button class="btn btn-sm btn-outline-danger delete-btn" data-file="${esc(c.fileName)}" title="Remove"><i class="bi bi-x-lg"></i></button>
       </td>
     </tr>`;
@@ -1207,9 +1218,21 @@ function renderTable() {
       return;
     }
 
+    const exportOneBtn = e.target.closest('.export-one-btn');
+    if (exportOneBtn) {
+      const fileName = exportOneBtn.dataset.file;
+      const contract = state.contracts.find(c => c.fileName === fileName);
+      if (!contract || !contract.fields || Object.keys(contract.fields).length === 0) {
+        showStatus('Extract this record before exporting it.', 'warning');
+        return;
+      }
+      exportSingleContract(contract);
+      showStatus(`Exported "${fileName}".`, 'success');
+      return;
+    }
+
     const reBtn = e.target.closest('.reextract-btn') || e.target.closest('.extract-one-btn');
-    if (!reBtn || reBtn.disabled) return;
-    const fileName = reBtn.dataset.file;
+    if (!reBtn || reBtn.disabled) return;    const fileName = reBtn.dataset.file;
     const contract = state.contracts.find(c => c.fileName === fileName);
     if (!contract) return;
 

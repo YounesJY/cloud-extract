@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.1] — 2026-08-04
+
+### Added
+- **Per-record export**: each row has a download button that exports just that contract to a CSV named after its source file
+
 ## [1.7.0] — 2026-08-04
 
 ### Added
