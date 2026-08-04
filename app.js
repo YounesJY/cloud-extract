@@ -361,6 +361,10 @@ PHONE:
 
 NAMES (Souscripteur, Nom Assuré): UPPERCASE
 For ${category} contracts, Nom Assuré is often the same company as Souscripteur
+- Output the name exactly as written. Do NOT merge checkbox/civil-status labels into the name:
+  e.g. "Mme Mlle M. X Sté" followed by "CHARI DONIA" → "CHARI DONIA" (NOT "STÉCHARI DONIA"),
+  "Sté" is a checkbox label meaning société, never part of the person's name.
+- Only keep a legal suffix (SARL, SA, S.A.R.L) if it is actually part of the written company name.
 
 Return ONLY the JSON object — no markdown, no explanation, no extra text.
 
@@ -468,9 +472,9 @@ function validateAndFix(fields) {
       if (cleaned !== fields[field]) {
         fields[field] = cleaned;
       }
-      // Round over-precise values (model artifact from mashed text, e.g. "208.4220842") to 2 decimals
+      // Round over-precise values (model artifact from mashed text, e.g. "208.4220842", "0.0000") to 2 decimals
       const f = parseFloat(fields[field]);
-      if (!isNaN(f) && Math.abs(f) > 0.0005 && String(fields[field]).replace(/\s/g, '').match(/[.,](\d+)/)?.[1].length > 2) {
+      if (!isNaN(f) && (Math.abs(f) > 0.0005 || f === 0) && String(fields[field]).replace(/\s/g, '').match(/[.,](\d+)/)?.[1].length > 2) {
         fields[field] = String(Math.round(f * 100) / 100);
       }
     }
@@ -527,6 +531,13 @@ function validateAndFix(fields) {
   for (const field of ['Adresse', 'Souscripteur', 'Nom Assuré', 'Profession']) {
     if (fields[field] && fields[field].includes('N?')) {
       fields[field] = fields[field].replace(/N\?(\d)/g, 'N°$1');
+    }
+  }
+
+  // Split "STÉ" glued onto a name (checkbox "Sté" + person name, e.g. "STÉCHARI DONIA" -> "CHARI DONIA")
+  for (const field of ['Souscripteur', 'Nom Assuré']) {
+    if (fields[field] && /^STÉ(?=[A-Z]{2,})/.test(fields[field])) {
+      fields[field] = fields[field].replace(/^STÉ/, '');
     }
   }
 }

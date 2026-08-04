@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.2] — 2026-08-04
+
+### Fixed
+- Rounding now also cleans all-zero artifacts (e.g. `0.0000` -> `0`) that the previous `Math.abs(f) > 0.0005` guard skipped
+- Names: prompt + post-fix split checkbox label "Sté" glued onto the person's name (e.g. `STÉCHARI DONIA` -> `CHARI DONIA`); legal suffix (SARL/SA) kept only when part of the written name
+
 ## [1.6.1] — 2026-08-04
 
 ### Fixed
