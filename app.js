@@ -2,7 +2,7 @@
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const FIELD_NAMES = [
-  'Police Num', 'Souscripteur', 'Adresse',
+  'Police Num', 'Attestation', 'Souscripteur', 'Adresse',
   "Date d'effet", "Date d'échéance", 'Téléphone',
   'Code Intermédiaire', 'N° Client', 'CIN',
   'Prime Totale TTC', 'Prime Nette', 'Taxes',
@@ -326,11 +326,17 @@ ${JSON.stringify(Object.fromEntries(fieldNames.map(f => [f, 'value'])), null, 2)
 RULES — Follow exactly:
 
 CRITICAL — Distinguish these codes carefully:
-- Police Num = CONTRACT/POLICY number. Look near 'Police N°', 'N° police'. NEVER use a phone number here.
-- N° Client = CLIENT identifier. Look near 'N° Client', 'Numéro client'. Can be alphanumeric like MG1401.
+- Police Num = CONTRACT/POLICY number. Look near 'N° Police', 'Police N°', 'N° police'. NEVER use the word "Attestation" as Police Num — an attestation is the document, not the policy number (e.g. N° Police "33B5795", N° Attestation "203472207" are DIFFERENT values).
+- Attestation = the attestation/certificate number. Look near 'N° Attestation'. Only fill when the document is an attestation (often the header of these short-form auto contracts).
+- N° Client / N° Souscripteur = CLIENT identifier (e.g. 5558134). Look near 'N° Client', 'N° Souscripteur', 'Numéro client'. Can be alphanumeric like MG1401.
 - Code Intermédiaire = SHORT intermediary code (3-8 digits). NOT a long description or name.
 - CIN = National ID card number. Format: 1-2 letters followed by 4-10 digits (e.g. EE123456, A123456). Never a word like 'traitant', 'cabinet', 'gérant'.
 - Téléphone = 10-digit Moroccan phone starting with 0. If looks like phone (06xx, 07xx, 05xx), put in Téléphone, NOT Police Num.
+
+NAMES — CLIENT vs INTERMEDIARY (very important in these attestation formats):
+- The "Intermédiaire" (broker/agent, e.g. "AKRAM EL KASSAD ASSURANCES SARL") is the intermediary, NOT the client.
+- Souscripteur and Nom Assuré = the CLIENT (the person/company being insured), e.g. "Mme AMAQRAN Dounya". The client appears under "Souscripteur", "Propriétaire du Véhicule", or "Conducteur Habituel" in the identity block.
+- NEVER use the intermediary's name as Souscripteur or Nom Assuré, even though it appears first in the document.
 
 NUMBERS (Prime Totale TTC, Prime Nette, Taxes):
 - Digits and dot only. NO currency (DH, MAD, dhs, €, $, Dirhams)
@@ -562,7 +568,7 @@ function validateAndFix(fields) {
   // Phone hygiene: drop insurer boilerplate numbers and dummy placeholders (not the client's phone)
   if (fields['Téléphone']) {
     const digits = fields['Téléphone'].replace(/\D/g, '');
-    const insurerPhones = ['0522499700', '0522420606', '0801001818', '0522225521', '0522957575'];
+    const insurerPhones = ['0522499700', '0522420606', '0801001818', '0522225521', '0522957575', '0522957538', '0802057057'];
     if (insurerPhones.includes(digits) || /^060+$/.test(digits) || /^0{10}$/.test(digits)) {
       delete fields['Téléphone'];
     }
@@ -571,6 +577,16 @@ function validateAndFix(fields) {
   // Police Num: strip placeholder-only values (PDFs with literal "....." fields)
   if (fields['Police Num'] && /^[.\-—_•\s]+$/.test(fields['Police Num'])) {
     delete fields['Police Num'];
+  }
+
+  // Police Num: "Attestation" is the document type, not a policy number
+  if (fields['Police Num'] && /^attestation$/i.test(fields['Police Num'].trim())) {
+    delete fields['Police Num'];
+  }
+
+  // Adresse: drop trailing column labels glued by pypdf (e.g. "... agadir ICE")
+  if (fields['Adresse']) {
+    fields['Adresse'] = fields['Adresse'].replace(/\s+ICE\s*$/i, '').trim();
   }
 
   // Normalize mangled degree sign (OCR artifact "N?12" -> "N°12")
@@ -594,9 +610,12 @@ function crossValidateAndFill(fields, pdfText) {
 
   // 1. Police Num
   let policeVal = null;
-  let policeMatch = fullText.match(/Police\s*N[°o]\s*:?\s*([A-Z0-9\-/]{3,25})/i);
+  let policeMatch = fullText.match(/(?:Police\s*N[°o]\s*:?|N[°o]\s*Police\s*:?)\s*([A-Z0-9\-/]{3,25})/i);
+  if (!policeMatch) {
+    policeMatch = fullText.match(/Noms\s*[|]?\s*([A-Z0-9]{4,20}?)\s*Dur[eé]e|([A-Z0-9]{5,12})\s*Dur[eé]e\s*Trimestrielle/i);
+  }
   if (policeMatch) {
-    policeVal = policeMatch[1].trim();
+    policeVal = (policeMatch[1] || policeMatch[2] || '').trim();
     if (policeVal) fields['Police Num'] = policeVal;
   } else {
     // Try CONTRAT N°
@@ -612,6 +631,22 @@ function crossValidateAndFill(fields, pdfText) {
         delete fields['Police Num'];
       }
     }
+  }
+
+  if (fields['Police Num'] && /^attestation$/i.test(fields['Police Num'].trim())) {
+    delete fields['Police Num'];
+  }
+
+  // 1b. Attestation number (short-form auto attestation documents)
+  if (!fields['Attestation']) {
+    const attM = fullText.match(/N[°o]\s*Attestation\s*:?\s*(\d{4,20})/i);
+    if (attM) fields['Attestation'] = attM[1];
+  }
+
+  // 1c. N° Souscripteur -> N° Client (attestation format uses "N° Souscripteur")
+  if (!fields['N° Client']) {
+    const subM = fullText.match(/N[°o]\s*Souscripteur\s*:?\s*([A-Z0-9\-/]{3,20})/i);
+    if (subM) fields['N° Client'] = subM[1];
   }
 
   // 2. Regex-fill null fields (non-price fields)
@@ -875,7 +910,8 @@ function regexExtract(text, category) {
   // Basic regex fallback (port of FieldExtractor.Extract)
   const fields = {};
   const patterns = {
-    "Police Num": /Police\s*N[°o]\s*:?\s*([A-Z0-9\-/]{3,25})/i,
+    "Police Num": /(?:Police\s*N[°o]\s*:?|N[°o]\s*Police\s*:?)\s*([A-Z0-9\-/]{3,25})/i,
+    "Attestation": /N[°o]\s*Attestation\s*:?\s*(\d{4,20})/i,
     "Souscripteur": /Souscripteur\s*:?\s*(.+)/i,
     "Adresse": /Adresse\s*:?\s*(.+)/i,
     "Date d'effet": /Date\s*d['e]ffet\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i,

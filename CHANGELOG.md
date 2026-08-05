@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.8.0] — 2026-08-04
+
+### Added
+- New **Attestation** field for short-form auto attestation documents (e.g. "N° Attestation 203472207")
+
+### Fixed
+- Client vs intermediary confusion: Souscripteur/Nom Assuré now correctly picks the **client** (e.g. "Mme AMAQRAN Dounya") instead of the broker ("AKRAM EL KASSAD ASSURANCES SARL") in attestation formats
+- Police Num no longer grabs the label "Attestation"; now captures the real policy number (e.g. "33B5795"), and `N° Souscripteur` maps to N° Client
+- Adresse: trailing column labels glued by pypdf (e.g. trailing "ICE") are stripped
+- Phone hygiene: added Maroc Assistance hotlines (0522957538, 0802057057) to the insurer boilerplate blacklist
+
 ## [1.7.2] — 2026-08-04
 
 ### Fixed
