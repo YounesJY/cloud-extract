@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.8.1] — 2026-08-04
+
+### Fixed
+- Client vs conducteur confusion: Souscripteur/Nom Assuré/Date de Naissance now come from the **Souscripteur** block (fallback: Propriétaire de Véhicule), never the "Conducteur Habituel" when a Souscripteur/Propriétaire exists (e.g. Souscripteur "SAMMOU ALI", Conducteur "SAMMOU MOHAMED")
+
 ## [1.8.0] — 2026-08-04
 
 ### Added

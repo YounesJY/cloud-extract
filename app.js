@@ -333,9 +333,12 @@ CRITICAL — Distinguish these codes carefully:
 - CIN = National ID card number. Format: 1-2 letters followed by 4-10 digits (e.g. EE123456, A123456). Never a word like 'traitant', 'cabinet', 'gérant'.
 - Téléphone = 10-digit Moroccan phone starting with 0. If looks like phone (06xx, 07xx, 05xx), put in Téléphone, NOT Police Num.
 
-NAMES — CLIENT vs INTERMEDIARY (very important in these attestation formats):
+NAMES — CLIENT vs INTERMEDIARY vs CONDUCTEUR (very important in these attestation formats):
 - The "Intermédiaire" (broker/agent, e.g. "AKRAM EL KASSAD ASSURANCES SARL") is the intermediary, NOT the client.
-- Souscripteur and Nom Assuré = the CLIENT (the person/company being insured), e.g. "Mme AMAQRAN Dounya". The client appears under "Souscripteur", "Propriétaire du Véhicule", or "Conducteur Habituel" in the identity block.
+- Souscripteur and Nom Assuré = the CLIENT (the person/company being insured), e.g. "Mme AMAQRAN Dounya".
+- Use the name under the "Souscripteur" block first. If that block is absent or empty, use "Propriétaire du Véhicule". ONLY use "Conducteur Habituel" when neither Souscripteur nor Propriétaire du Véhicule is available.
+- CRITICAL: "Conducteur Habituel" may be a DIFFERENT person than the client (e.g. Souscripteur "SAMMOU ALI", Conducteur habituel "SAMMOU MOHAMED"). Do NOT use the conducteur as Souscripteur/Nom Assuré when a Souscripteur/Propriétaire block exists.
+- Date de Naissance = the CLIENT's birth date (the same person chosen for Souscripteur/Nom Assuré), NOT the conducteur's.
 - NEVER use the intermediary's name as Souscripteur or Nom Assuré, even though it appears first in the document.
 
 NUMBERS (Prime Totale TTC, Prime Nette, Taxes):
