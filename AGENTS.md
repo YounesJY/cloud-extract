@@ -28,10 +28,11 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 1. User uploads PDF(s) — binary stored in IndexedDB, shows upload progress
 2. pdf.js extracts text with spatial positioning (letter grouping by Y)
 3. AI auto-detects contract category (RC, AT, AUTO, etc.) from text
-4. Cleaned text sent to OpenRouter with category-specific prompt
+4. Cleaned text sent to OpenRouter with category-specific prompt (temperature 0 for determinism)
    - Long texts are truncated (max 12000 chars) but always keep the head **and** the PRIME/pricing section
 5. AI response parsed + cross-validated against PDF text via regex
-6. Results displayed in sortable table, stored in localStorage
+6. If `Prime Totale TTC` does not reconcile with `Prime Nette + Taxes`, a **second AI pass** (`recheckPrices`) re-asks for just those three fields at temperature 0 before the row is flagged "review"
+7. Results displayed in sortable table, stored in localStorage
 
 ## Models
 
@@ -61,8 +62,10 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - OpenRouter AI with regex fallback (`regexExtract`); pricing fields use a dedicated regex layer (`fillPriceFields`) with label-first + value-before-label amount pairing
 - AI API failures are surfaced in the UI: Method badge shows "regex (AI fail)" (error on hover), status bar reports fallback count
 - OpenRouter 4xx errors (401/402/403/404) are NOT retried — they fail fast
+- Temperature 0 for deterministic output; repeated runs return stable results
+- `recheckPrices`: second AI pass (temperature 0) focused on the 3 price fields when the math check fails
 - Parallel batch extraction via `Promise.allSettled`
-- Per-file re-extract button with spinner
+- Per-record extraction button on each pending row; per-row re-extract button with spinner
 - Cross-validation: phone, CIN, dates, numeric, field sanity checks
 
 ### Display
@@ -74,6 +77,7 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - Inline editable fields (click to edit, Enter or blur to save)
 - Scrollable table body (fills viewport: calc(100vh - 280px))
 - XLSX/CSV export of visible columns, with a leading "File Name" column
+- Per-record export button exports a single contract to a CSV named after its source file
 
 ### Settings
 - API key with show/hide toggle
@@ -93,7 +97,9 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 
 ## Cross-Validation Rules (port from C#)
 
-- Police Num: regex `Police\s*N[°o]\s*:?\s*([A-Z0-9\-/]{3,25})` or `CONTRAT\s*N[°o]\s*:?\s*([A-Z0-9\-./]{3,30})`
+- Police Num: regex `(?:Police\s*N[°o]\s*:?|N[°o]\s*Police\s*:?)\s*([A-Z0-9\-/]{3,25})` or `CONTRAT\s*N[°o]\s*:?\s*([A-Z0-9\-./]{3,30})`; the label "Attestation" is never a policy number
+- Attestation: regex `N[°o]\s*Attestation\s*:?\s*(\d{4,20})` (short-form auto attestation documents)
+- `N° Souscripteur` is mapped to N° Client (attestation format naming)
 - If no regex match and value looks like a phone (7-10 digits), move to Téléphone
 - N° Client: regex `N[°o]\s*Client\s*:?\s*([A-Z0-9\-/]{3,20})`
 - CIN: validate format `^[A-Z]{1,2}\d{4,10}$`, clear if invalid
@@ -103,10 +109,14 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 - Date swap: if effet > échéance, swap them
 - Prime Totale TTC >= Prime Nette, swap if not
 - Pricing (`fillPriceFields`): TTC ≈ Nette + Taxes (math check); never use "prime minimale"/franchise minimum as TTC; Taxes = labeled "Taxes" only (not FSEC/catastrophiques/accessoires); round to ≤2 decimals
+- `checkPriceConsistency` flags rows where TTC ≠ Nette + Taxes beyond tolerance (5%, or 20% when "Accessoires"/"Assistance" present); also detects the garanties-table "Total" trap (nette must not equal a table "Total" row) — shown as a "review" badge
 - `cleanLabeledValue`: strips label-prefix junk ("Nom et prénom ou raison sociale :", "intermédiaire :") from Souscripteur/Adresse
-- Téléphone hygiene: insurer/intermediary boilerplate numbers and dummy patterns (0600000000) are dropped
+- Téléphone hygiene: insurer/intermediary/assistance boilerplate numbers (0522499700, 0522420606, 0801001818, 0522225521, 0522957575, 0522957538, 0802057057, ...) and dummy patterns (0600000000) are dropped
 - Placeholder-only Police Num (literal ".....") and `N?`→`N°` OCR artifacts are cleaned
-- `checkPriceConsistency` flags rows where TTC ≠ Nette + Taxes beyond tolerance (shown as a "review" badge)
+- Names: glued "Sté" checkbox labels are split (`STÉCHARI DONIA`→`CHARI DONIA`); legal suffixes (SARL/SA) kept only when part of the written name
+- Adresse: trailing column labels glued by pypdf (e.g. trailing "ICE") are stripped
+- Client identity (prompt-driven): Souscripteur/Nom Assuré/Date de Naissance come from the **Souscripteur** block, falling back to **Propriétaire de Véhicule**, then **Conducteur Habituel** — never the intermediary (broker) or a conducteur who differs from the client
+- Price second-pass: when reconciliation fails, `recheckPrices` re-asks the model for only `Prime Totale TTC`, `Prime Nette`, `Taxes` (temperature 0)
 
 ## Build/Run
 

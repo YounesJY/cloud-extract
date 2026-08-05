@@ -5,16 +5,19 @@ Web-based insurance contract data extraction tool. Upload Moroccan insurance PDF
 ## Features
 
 - **PDF Upload** — Drag & drop or file picker, batch upload with progress bar, 50MB limit
-- **AI Extraction** — Uses OpenRouter API (DeepSeek V3, GPT-4o Mini, GPT-4.1 Nano, or Gemini 2.0 Flash) with a regex fallback when AI fails
+- **AI Extraction** — Uses OpenRouter API (DeepSeek V3, GPT-4o Mini, GPT-4.1 Nano, or Gemini 2.0 Flash) with a regex fallback when AI fails. Runs at temperature 0 for deterministic, repeatable results.
 - **Auto Category Detection** — AI classifies the document type before extraction
+- **Price Consistency** — A second AI pass re-asks for just `Prime Nette`/`Taxes`/`Prime Totale TTC` when they don't reconcile, before flagging a row "review"
 - **Smart Validation** — Cross-references AI output with PDF text via regex
+- **19 Fields** — incl. `Police Num`, `Attestation`, `Souscripteur`, `Nom Assuré`, all price amounts, garanties, montants, franchises, and more
 - **PDF Preview** — Per-record modal with multi-page viewer, zoom (25%–400%), text selection, copy, and search
 - **Results Table** — Sortable columns, per-row category change, search/filter, field visibility toggles, drag-and-drop field reordering
-- **Per-file Actions** — Preview PDF, re-extract, or delete individual files
-- **Batch Operations** — Bulk set category, batch re-extract
-- **Export to Excel/CSV** — Download visible columns only
+- **Per-file Actions** — Preview PDF, extract one record, re-extract, export one record to CSV, or delete individual files
+- **Batch Operations** — Bulk set category, batch re-extract, full-batch export
+- **Export to Excel/CSV** — Download visible columns only, plus per-record single-CSV export
 - **Dark Mode** — Toggle in navbar, persists across reload
 - **Persistent Storage** — Contracts in localStorage, PDF cache in IndexedDB (survives page reload)
+- **Report issue** — navbar button opens a GitHub issue pre-filled with the source file, category, extraction method, AI error, and fields
 
 ## How to run (local)
 
@@ -34,6 +37,16 @@ The app is a static site — all libraries load from CDN, and AI calls go direct
 4. App is live at `https://<username>.github.io/cloud-extract/`
 
 Client needs only: internet connection, a modern browser, and their own OpenRouter API key.
+
+## Extraction Accuracy
+
+Verified end-to-end against real contracts across **4 document formats**:
+
+- **Allianz/Sanlam full contracts** — 9/9 contracts with correct prices (Prime Nette, Taxes, Prime Totale TTC all reconcile)
+- **Allianz short-form auto attestations** (e.g. AMAQRAN Dounya) — 100% accurate incl. the `Attestation` field
+- **SANLAM Assur Auto attestations** (e.g. SAMMOU ALI) — 100% accurate after the client-vs-conducteur fix
+
+Known-handled edge cases: insurer/intermediary phone numbers (dropped), placeholder police numbers (`.....`), OCR artifacts (`N?12`→`N°12`), glued checkbox labels (`STÉCHARI DONIA`→`CHARI DONIA`), client vs intermediary vs conducteur identity, FSEC/NARSA tax sums, garanties-table "Total" trap.
 
 ## Requirements
 
