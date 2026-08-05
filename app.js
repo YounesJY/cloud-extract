@@ -280,7 +280,8 @@ async function renderPdfPreview(pdfData, pageNum, scale = 1.5) {
 
 // ===================== OPENROUTER API =====================
 const HARDCODED_MODELS = [
-  { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3 (best accuracy)', pricing: { prompt: '0.27', completion: '1.10' } },
+  { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3 (best accuracy)', pricing: { prompt: '0.2574', completion: '1.0287' } },
+  { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash (fast fallback)', pricing: { prompt: '0.14', completion: '0.28' } },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini (fast fallback)', pricing: { prompt: '0.15', completion: '0.60' } },
   { id: 'openai/gpt-4.1-nano', name: 'GPT-4.1 Nano (cheapest)', pricing: { prompt: '0.10', completion: '0.40' } },
   { id: 'google/gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash (free)', pricing: { prompt: '0', completion: '0' } },
