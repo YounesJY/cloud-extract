@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.8.2] — 2026-08-05
+
+### Changed
+- **Default model restored to DeepSeek V3** (`deepseek/deepseek-chat`) and verified OpenRouter
+  pricing applied ($0.2574 in / $1.0287 out per 1M). DeepSeek V4 Flash kept as a fast fallback.
+  Rationale: benchmarked on 11 real contracts, V3 scored 11/11 vs ~4/11 (V4 Flash 0423) and
+  ~2/11 (V4 Flash 0731). V4 Flash models confuse agency vs client address, take placeholders
+  (`/prénom ou raison sociale :`) and phone numbers as the insured name, and drop/mangle amounts.
+- Expected cost at max volume (1,500 PDF/mo): **~$4/mo (~$50/yr)**, ~$0.003/file. DeepSeek V3 is a
+  paid-only model; speed measured at ~21–30 tok/s via OpenRouter (sufficient for this workload).
+  No OpenRouter cached-input price for V3 currently (repeats billed at full input rate).
+
 ## [1.8.1] — 2026-08-04
 
 ### Fixed

@@ -54,6 +54,19 @@ Known-handled edge cases: insurer/intermediary phone numbers (dropped), placehol
 - OpenRouter API key + a small credit balance (single contracts cost ~$0.001–0.003; add credits at https://openrouter.ai/settings/credits)
 - Local run: no Python, Node.js, or .NET — `start.bat` uses built-in Windows PowerShell
 
+## AI Model & Pricing
+
+- **Default model: DeepSeek V3** (`deepseek/deepseek-chat`, **$0.2574 in / $1.0287 out per 1M**).
+  Verified open accuracy: **11/11** contracts vs ~4/11 (V4 Flash 0423) and ~2/11 (V4 Flash 0731).
+- **Expected cost:** ~$0.003/file → **~$4/month, ~$50/year at max 1,500 PDFs/mo** (negligible).
+- **Speed:** OpenRouter routes V3 at ~21–30 tok/s, ~0.7–1.2s to first token; a full contract extracts
+  in ~30–45s.
+- **Paid vs free:** DeepSeek V3 is paid-only. The free tier (Gemini 2.0 Flash, `:free`) is
+  rate-limited (~20 req/min, ~1000 req/day) and too unstable at this volume.
+- **Prompt caching:** OpenRouter lists no cached-input price for V3 (full-rate repeats). Revisit
+  when a cache tier appears.
+- Full analysis lives in the LaTeX report `/Rapport_Modeles_Cout.tex`.
+
 ## Project Structure
 
 ```

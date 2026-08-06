@@ -36,12 +36,32 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 
 ## Models
 
-| Model | Cost | Accuracy |
-|---|---|---|
-| DeepSeek V3 | ~$0.003/file | Best (recommended) |
-| GPT-4o Mini | ~$0.002/file | Good fallback |
-| GPT-4.1 Nano | ~$0.001/file | Cheapest OpenAI |
-| Gemini 2.0 Flash | Free | Basic |
+Hardcoded fallback list (live OpenRouter list used when API key set). Prices are the verified
+OpenRouter catalogue rates per 1M tokens (05/08/2026).
+
+| Model | ID (OpenRouter) | Input | Output | Accuracy (test) | Role |
+|---|---|---|---|---|---|
+| DeepSeek V3 | `deepseek/deepseek-chat` | $0.2574 | $1.0287 | 11/11 (100%) | **Default (recommended)** |
+| DeepSeek V4 Flash | `deepseek/deepseek-v4-flash` | $0.14 | $0.28 | ~4/11 | Fast fallback |
+| GPT-4o Mini | `openai/gpt-4o-mini` | $0.15 | $0.60 | Good | Fallback |
+| GPT-4.1 Nano | `openai/gpt-4.1-nano` | $0.10 | $0.40 | Good | Cheap fallback |
+| Gemini 2.0 Flash | `google/gemini-2.0-flash-exp` | $0 | $0 | Basic | Free tier |
+
+### Model decision (2026-08-05)
+- **DeepSeek V3 is the default.** Tested against 11 real contracts it scored **11/11**, while
+  DeepSeek V4 Flash 0423 scored ~4/11 and V4 Flash 0731 ~2/11 (Flash models confuse agency address
+  with client, extract placeholder labels like `/prénom ou raison sociale :`, take phone numbers for
+  the insured name, and produce missing/wrong amounts).
+- V4 Flash models are NOT used because accuracy loss outweighs the ~2× cheaper price.
+- **Cost at max volume (1,500 PDF/mo): ~$4/mo (~$50/yr)** — negligible. ~$0.003/file.
+- **Speed is sufficient:** OpenRouter routes V3 at ~21–30 tok/s (~0.7–1.2s TTFT); a ~900-token
+  extraction takes ~30–45s (~10–15s per document across 50/day, or overnight batch).
+- **Paid vs free:** DeepSeek V3 is a paid model only (not on the `:free` tier). The free tier
+  (Gemini 2.0 Flash, `:free` variants) is rate-limited (~20 req/min, ~1000 req/day) and unstable at
+  this volume.
+- **Prompt caching note:** OpenRouter publishes no cached-input price for V3; repeats are billed at
+  full input rate. Revisit when they add a cache tier.
+- Costs below reused by the LeTeX report at `Rapport_Modeles_Cout.tex`.
 
 ## Features
 
