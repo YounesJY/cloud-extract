@@ -685,6 +685,13 @@ function crossValidateAndFill(fields, pdfText) {
     fields['Nom Assuré'] = fields['Souscripteur'];
   }
 
+  // 4b. SANLAM "Assur Auto" attestations: the Souscripteur section mixes the
+  // souscripteur (client) and the conducteur habituel (a different person, e.g.
+  // Souscripteur "AIT OULAHYANE MOHAMED" vs Conducteur "AIT OULAHYANE AYMAN").
+  // The model sometimes picks the conducteur. The "Propriétaire de véhicule"
+  // block always repeats the client — use it as the authoritative identity.
+  fixAssurAutoClientIdentity(fields, pdfText);
+
   // 5. CIN: validate format
   if (fields['CIN'] && !/^[A-Z]{1,2}\d{4,10}$/i.test(fields['CIN'])) {
     delete fields['CIN'];
@@ -697,6 +704,43 @@ function crossValidateAndFill(fields, pdfText) {
       delete fields['Téléphone'];
     }
   }
+}
+
+// SANLAM "Assur Auto" attestations: the client identity comes from the
+// "Propriétaire de véhicule" block (name + ID + DOB), which repeats the
+// Souscripteur. The AI may instead pick the "Conducteur Habituel" (a different
+// person, e.g. AIT OULAHYANE AYMAN) when the Souscripteur/Conducteur section
+// lists two people. Re-derive Souscripteur/Nom Assuré/CIN/Date de Naissance
+// from the Propriétaire block to fix that.
+function fixAssurAutoClientIdentity(fields, pdfText) {
+  if (!/Assur\s*Auto/i.test(pdfText)) return;
+
+  const propIdx = pdfText.search(/Propri[ée]taire\s+de\s+v[ée]hicule/i);
+  if (propIdx === -1) return;
+  const propSeg = pdfText.slice(propIdx);
+  // name: "Nom et Prénom : SAMMOU ALI" or "Raison sociale : D2A ELEC";
+  // names may wrap across lines in pypdf text (e.g. "AIT OULAHYANE \nMOHAMED")
+  const nameM = propSeg.match(
+    /(?:Nom et Pr[ée]nom|Raison sociale)\s*:?\s*([\s\S]{2,80}?)(?=\r?\n\s*(?:N[°o]\s*d['']?identit[ée]|CIN\/?RC|Date\s+de\s+naissance|Adresse|Raison sociale|Nom et Pr[ée]nom))/i
+  );
+  if (!nameM || !nameM[1]) return;
+  const propName = nameM[1].replace(/\s+/g, ' ').replace(/[.,;:]+$/, '').trim();
+  if (!propName) return;
+
+  // Only override when the AI's Souscripteur is NOT the Propriétaire client
+  // (i.e. it picked the conducteur or something else).
+  const current = (fields['Souscripteur'] || '').toUpperCase().replace(/\s+/g, ' ');
+  const target = propName.toUpperCase().replace(/\s+/g, ' ');
+  if (!current || current === target) return;
+
+  const cinM = propSeg.match(/N[°o]\s*d['']?identit[ée]\s*:?\s*([A-Z0-9]{3,12})/i)
+    || propSeg.match(/CIN\/?RC\s*:?\s*([A-Z]{1,2}\d{4,10})/i);
+  const dobM = propSeg.match(/Date\s+de\s+naissance\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i);
+
+  fields['Souscripteur'] = propName;
+  fields['Nom Assuré'] = propName;
+  if (cinM && cinM[1] && /^[A-Z]{1,2}\d{4,10}$/i.test(cinM[1])) fields['CIN'] = cinM[1];
+  if (dobM && dobM[1]) fields['Date de Naissance'] = dobM[1];
 }
 
 // ===================== PRICE REGEX FILL (Allianz mashed tables) =====================

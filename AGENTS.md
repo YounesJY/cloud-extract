@@ -136,6 +136,7 @@ OpenRouter catalogue rates per 1M tokens (05/08/2026).
 - Names: glued "Sté" checkbox labels are split (`STÉCHARI DONIA`→`CHARI DONIA`); legal suffixes (SARL/SA) kept only when part of the written name
 - Adresse: trailing column labels glued by pypdf (e.g. trailing "ICE") are stripped
 - Client identity (prompt-driven): Souscripteur/Nom Assuré/Date de Naissance come from the **Souscripteur** block, falling back to **Propriétaire de Véhicule**, then **Conducteur Habituel** — never the intermediary (broker) or a conducteur who differs from the client
+- SANLAM **"Assur Auto"** attestations list TWO people under the Souscripteur section (client + conducteur habituel) and the model sometimes picks the conducteur. Deterministic post-fix `fixAssurAutoClientIdentity`: for this format, derive Souscripteur/Nom Assuré/CIN/Date de Naissance from the **Propriétaire de véhicule** block (name, ID, DOB), overriding only when the AI's Souscripteur differs from that client. Handles wrapped names (e.g. "AIT OULAHYANE MOHAMED") and skips invalid/numeric CINs (e.g. "56053"). NO-OP when AI already correct (SAMMOU ALI, D2A ELEC).
 - Price second-pass: when reconciliation fails, `recheckPrices` re-asks the model for only `Prime Totale TTC`, `Prime Nette`, `Taxes` (temperature 0)
 
 ## Build/Run

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.8.3] — 2026-08-06
+
+### Fixed
+- SANLAM **"Assur Auto"** attestation client identity: the Souscripteur section lists two people
+  (client + conducteur habituel, e.g. Souscripteur "AIT OULAHYANE MOHAMED" vs Conducteur
+  "AIT OULAHYANE AYMAN"). When the AI picked the conducteur, Souscripteur/Nom Assuré/CIN/Date de
+  Naissance are now deterministically re-derived from the **Propriétaire de véhicule** block
+  (name + ID + DOB). Handles pypdf line-wrapped names ("AIT OULAHYANE \nMOHAMED"), skips invalid
+  CIN formats (`xx000000`, numeric `56000`), and leaves correct results untouched (SAMMOU ALI,
+  D2A ELEC). Verified against all 6 attestation PDFs + getDocument.
+
 ## [1.8.2] — 2026-08-05
 
 ### Changed
