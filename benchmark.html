@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud Extract — Model Benchmark</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f5f6f8; color: #1c2330; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .04em; color: #374151; }
+  label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 4px; color: #374151; }
+  input[type=text], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+  textarea { font-family: ui-monospace, monospace; font-size: 12px; min-height: 120px; }
+  input[type=file] { font-size: 12px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 260px; }
+  button { background: #2563eb; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-size: 13px; cursor: pointer; }
+  button:disabled { background: #9ca3af; cursor: not-allowed; }
+  button.secondary { background: #e5e7eb; color: #111827; }
+  .status { font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #e5e7eb; padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: #f3f4f6; position: sticky; top: 0; }
+  td.ok { background: #ecfdf5; color: #047857; }
+  td.bad { background: #fef2f2; color: #b91c1c; }
+  td.skip { background: #f9fafb; color: #9ca3af; }
+  .score { font-size: 15px; font-weight: 700; }
+  .score.good { color: #047857; } .score.mid { color: #b45309; } .score.bad { color: #b91c1c; }
+  .tblwrap { max-height: 600px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .meta { font-size: 12px; color: #6b7280; margin-top: 6px; }
+  .hint { font-size: 12px; color: #6b7280; margin-top: 6px; }
+  #fileList { font-size: 12px; color: #374151; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cloud Extract — Model Benchmark</h1>
+  <div class="sub">Runs the 11 known contracts through any OpenRouter model using the <b>exact</b> production pipeline (prompt, validation, cross-fill, price recheck) and compares each field against the verified ground truth.</div>
+
+  <div class="card">
+    <h2>1 · Setup</h2>
+    <div class="row">
+      <div>
+        <label>OpenRouter API key</label>
+        <input type="text" id="apiKey" placeholder="sk-or-v1-... (auto-filled from saved app settings)">
+      </div>
+      <div>
+        <label>Model to test</label>
+        <select id="model"></select>
+      </div>
+      <div>
+        <label>Or type a custom model ID</label>
+        <input type="text" id="modelCustom" placeholder="e.g. openai/gpt-4o-mini">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Select the 11 contract PDFs</label>
+        <input type="file" id="files" multiple accept="application/pdf">
+        <div id="fileList" class="meta"></div>
+      </div>
+      <div>
+        <label>Ground truth CSV (pre-filled with verified V3 export)</label>
+        <textarea id="gt" spellcheck="false"></textarea>
+        <button class="secondary" id="loadGt">Load from file</button>
+        <input type="file" id="gtFile" accept=".csv" style="display:none">
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <button id="run">Run benchmark</button>
+      <span class="hint">Roughly $0.02–0.04 per run of 11 files (V3 pricing). Watch the live cost below.</span>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · Results</h2>
+    <div id="summary"></div>
+    <div class="tblwrap"><table id="out"><thead></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<script>
+  // ---- stub the app's expected DOM element IDs so app.js init doesn't crash ----
+  (function () {
+    const ids = ["apiKeyInput","batchCategorySelect","categorySelect","clearBtn","darkModeToggle","deselectAllFields","dropZone","exportBtn","exportCsvBtn","exportModal","exportXlsxBtn","extractBtn","fieldToggleBody","fileInput","filePickerLink","modelPricing","modelSelect","nextPage","pageInfo","pageNav","pdfPreviewModal","pdfSearchClear","pdfSearchInput","pdfSearchWrap","pdfSelector","pdfViewer","prevPage","progressBar","progressWrap","refreshModelsBtn","reportIssueBtn","resultsWrap","saveSettingsBtn","searchInput","selectAllFields","settingsModal","statusBar","statusText","tableBody","tableHead","tableWrap","toggleKeyBtn","zoomIn","zoomNav","zoomOut","zoomReset"];
+    for (const id of ids) {
+      let el = document.getElementById(id);
+      if (!el) {
+        el = document.createElement('div');
+        el.id = id;
+        el.style.display = 'none';
+        document.body.appendChild(el);
+      }
+    }
+  })();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="app.js"></script>
+<script>
+  // ============ harness ============
+  const $ = id => document.getElementById(id);
+
+  // live cost tracking by wrapping fetch
+  let costAccum = 0;
+  let tokenAccum = { prompt: 0, completion: 0 };
+  let modelPricing = null;
+  const origFetch = window.fetch;
+  window.fetch = async function (...args) {
+    const resp = await origFetch.apply(this, args);
+    try {
+      const ct = (resp.headers.get('content-type') || '');
+      if (ct.includes('application/json')) {
+        const clone = resp.clone();
+        const body = await clone.json();
+        if (body && body.usage && (body.usage.prompt_tokens || body.usage.completion_tokens)) {
+          const p = body.usage.prompt_tokens || 0;
+          const c = body.usage.completion_tokens || 0;
+          tokenAccum.prompt += p;
+          tokenAccum.completion += c;
+          if (modelPricing) {
+            costAccum += (p / 1e6) * (parseFloat(modelPricing.prompt) || 0) + (c / 1e6) * (parseFloat(modelPricing.completion) || 0);
+          }
+        }
+      }
+    } catch (e) {}
+    return resp;
+  };
+
+  // ground truth = verified V3 export rows (known-correct reference)
+  const GT_DEFAULT = `File Name,Police Num,N° Client,Souscripteur,Attestation,Date d'échéance,Prime Totale TTC,Date d'effet,Adresse,Code Intermédiaire,CIN,Prime Nette,Taxes,Garanties,Montants Garantis,Franchises,Date de Naissance,Nom Assuré,Profession
+ContratDocument (9).pdf,9936084,4123750,M. EL HADRI OMAR,,16/07/2027,873.28,17/07/2026,Rue IMM 106 APPT 16 HAY MOHAMMADI,01883,,660.00,99.79,"Garantie contre les conséquences d’évènements catastrophiques Dommages aux biens, Garantie contre les conséquences d’évènements catastrophiques Dommages corporels","1000000.00, 1000000.00","10% du montant des dommages avec un minimum de 5000 DH, 10% du montant des dommages avec un minimum de 7000 DH",18/07/1983,M. EL HADRI OMAR,AUTRE
+ContratDocument (10).pdf,9614594,,STE RAZREV S.A.R.L AU,,16/07/2027,1817.15,17/07/2026,Rue N° A 85 E WEFAQ BENSERGAO AGADIR,01883,,1500.00,214.20,"Responsabilité civile exploitation, Dommages Corporels, Dommages Matériels, Dommages immatériels consécutifs à un dommage matériel garanti, Défense & Recours, RC - Evénements catastrophiques","5000000.00, 1000000.00, 200000.00, 10000.00, null",10% min 500.00 autre que corporel,,STE RAZREV S.A.R.L AU,Entreprise d'installation téléphonique
+ContratDocument (11).pdf,9771637,5579388,Mme OUAHMANE HANANE,,15/01/2027,154.94,16/07/2026,Rue BLOC 03 HAY SIDI MIMOUNE KASBAT TAHER AIT MELLOUL,,EB182196,112.50,15.75,"Décès accidentel, Infirmité permanente, Frais médicaux, Incapacité temporaire","10000.00, 10000.00, 1500.00, 0.00",5 % sur le taux IPP,02/01/1996,Mme OUAHMANE HANANE,Stagiaire
+cp_SCHENGEN VISA (14).pdf,SV.26.490844,,MOHTARAM SOUKAINA,,24/09/2026,290.00,25/03/2026,HAY TILILA NR 116 TIKIOUINE AGADIR,1011,JK42257,290.00,0.00,,,,06/02/2005,MOHTARAM SOUKAINA,Autre
+ContratDocument (12).pdf,9135951,,STE FECM,,02/01/2027,7250.00,03/07/2026,Rue BLOC CN° 263 LOT ANZA EL OULYA TADDART BANLIEUE AGADIR,01883,,6000.00,1200.00,,,,,STE FECM,ENTREPRISE CONSTRUCTION DE BATIMENTS ( SAUF OUVRAGE D'ART )
+getDocument.pdf,,,D2A ELEC,,26/07/2027,5520.75,28/07/2026,LOT EL WALKALA 01 BLOC D N°608 BIS 70000 laâyoune,,,4409.05,888.83,"Responsabilité civile, Défense Recours, Vol, Incendie, Bris de glaces, Protection du Conducteur et des Passagers, Rachat de franchise, Rachat de vétusté, Dommages au véhicule, Bris des rétroviseurs, Vol des rétroviseurs, Evènements catastrophiques adossée à la RC, Evènements catastrophiques adossée aux GA, Assistance complémentaire","50000000, 15000, Valeur vénale, Valeur vénale, Valeur déclarée, Sans, Sans, Valeur vénale, Valeur vénale, 4000, 6000, Voir Clauses en Annexe, Voir Clauses en Annexe, Voir tableau en annexe","Sans, Sans, 5% sur dommages, Sans, 5% avec un minimum de 300dhs, Sans, Sans, Sans, 10% sur dommages avec min de 1000 Dhs, 5% avec un minimum de 300 dhs, 5% avec un minimum de 300 dhs, Voir Clauses en Annexe, Voir Clauses en Annexe, Voir tableau en annexe",01/02/1980,D2A ELEC,
+ContratDocument (17).pdf,A946233,4938616,CHARI DONIA,,25/06/2025,1761.98,25/06/2024,Rue BD ABDERRAHIM BOUABID IMM ANAFLASS N°12 AGADIR,01883,,1411.20,208.42,"Incendie et risques annexes (Garantie de base), Perte ou avaries des denrées alimentaires en meubles ou chambres frigorifiques, Emeutes ou mouvement populaires (dommages incendie explosions), Dégâts des eaux, Vol, Vol dans les vitrines après bris de glaces, Transport de fonds, Détournement de fonds, Bris de glaces, Bris d'enseignes, Bris de machines, Remboursement des loyers de leasing, Bris du matériel informatique et bureautique, Responsabilité Civile Exploitation, RC après livraison des produits, Chirurgien dentiste, RC Professionnelle, Perte d'activité, Chef d'entreprise, Garanties événements catastrophiques","200000.00, 0.00, 20000.00, 200000.00, 200000.00, 0.00, 25000.00, 25000.00, 10000.00, 0.00, 0.00, 0.00, 0.00, 0.00, 500000.00, 0.00, 0.00, 200000.00","15% du montant des dommages avec un minimum de 20000 DH, 15% du montant des dommages avec un minimum de 10000 DH",,CHARI DONIA,CABINET DENTAIRE
+ContratDocument (16).pdf,A610120,,M. BENTALEB MOHAMED,,11/07/2026,105.79,12/07/2025,Rue LOTISSEMENT AMLAL NR 312 TARRAST INEZGANE,01883,JB4329,83.30,11.66,,,,,M. BENTALEB MOHAMED,
+ContratDocument (15).pdf,9636715,,ECOLE CHOUROUK,,06/10/2022,1198.00,07/10/2021,Rue RESIDENCE CHOUROUK TRANCHE 4 AMAL 2 IMMEUBLE 5 REZ DE CHAUSSE,01883,,1000.00,142.80,"RC EXPLOITATION, Dommages corporels, Dommages matériels, RC Incendie Explosion hors locaux, RC Dégâts des Eaux hors locaux, Intoxications alimentaires, Défense et recours, INDEMNITES CONTRACTUELLES, En cas de décès, Infirmité permanente partielle Absolue 5%, Frais médicaux et pharmaceutiques, Bris de lunettes (Une fois par an), Couverture à l'étranger suite à un accident garanti, RC - Evénements catastrophiques – Dommages Corporels","2500000.00, 500000.00, 100000.00, 100000.00, 500000.00, 10000.00, 5000.00, 10000.00, 500.00, 500.00, 0.00, 0.00",500.00 DH par sinistre sur dommages autres que corporels,,ECOLE CHOUROUK,Crèche (Garderie et maternelle)
+AMAQRAN Dounya.pdf,33B5795,5558134,Mme AMAQRAN Dounya,203472207,03/09/2026,513.31,04/06/2026,rue el foura nr 14 bouargane agadir,01883,JK30617,407.28,62.92,"RESPONSABILITE CIVILE, RC- Evénements catastrophiques, PROTECTION JURIDIQUE, GARANTIES IND/ PROTECTION CONDUCTEUR, PTA/ PERSONNES TRANSPORTEES","50000000.00, 200000.00, 10000.00, 10000.00, 10000.00","10% du montant de l’indemnité avec un minimum de 3000 DH, 15% du montant des dommages avec un minimum de 10000 DH",16/04/1997,Mme AMAQRAN Dounya,
+Attestation.pdf,AU11202601600526,,SAMMOU ALI,207698664,03/08/2027,2013.71,04/08/2026,QUARTIER ENNAHDA RUE OUED EDDAHAB NR 32 AL MARSA 70000 laâyoune,,N85877,1544.90,286.89,"Responsabilité civile, Protection Juridique, Protection du Conducteur et des Passagers, Evènements catastrophiques adossée à la RC, Assistance complémentaire","50000000, 15000, 0, 0, 0","Sans, Sans, Exclue, 10% du montant de l'indemnité avec un minimum de 3000 DH, Voir tableau en annexe",01/01/1960,SAMMOU ALI,Autre`;
+
+  const FIELD_ORDER = ['Police Num', "N° Client", 'Souscripteur', 'Attestation', "Date d'échéance", 'Prime Totale TTC', "Date d'effet", 'Adresse', 'Code Intermédiaire', 'CIN', 'Prime Nette', 'Taxes', 'Garanties', 'Montants Garantis', 'Franchises', 'Date de Naissance', 'Nom Assuré', 'Profession'];
+
+  function parseCsv(text) {
+    // minimal RFC4180-ish parser (handles quoted fields with commas)
+    const rows = [];
+    let row = [], cur = '', inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) {
+        if (ch === '"') { if (text[i+1] === '"') { cur += '"'; i++; } else inQ = false; }
+        else cur += ch;
+      } else if (ch === '"') inQ = true;
+      else if (ch === ',') { row.push(cur); cur = ''; }
+      else if (ch === '\n') { row.push(cur); cur = ''; rows.push(row); row = []; }
+      else if (ch === '\r') { /* skip */ }
+      else cur += ch;
+    }
+    if (cur.length || row.length) { row.push(cur); rows.push(row); }
+    return rows.filter(r => r.some(c => c.trim() !== ''));
+  }
+
+  function normalize(v) {
+    if (v == null) return '';
+    return String(v).replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+  function normalizeNum(v) {
+    if (v == null) return '';
+    let s = String(v).replace(/\s/g, '').replace(/,/g, '.').replace(/[^0-9.]/g, '');
+    if (!s) return '';
+    const n = parseFloat(s);
+    return isNaN(n) ? '' : n.toFixed(2);
+  }
+  const NUM_FIELDS = ['Prime Totale TTC', 'Prime Nette', 'Taxes'];
+
+  const GT_COLS = ['File Name','Police Num',"N° Client",'Souscripteur','Attestation',"Date d'échéance",'Prime Totale TTC',"Date d'effet",'Adresse','Code Intermédiaire','CIN','Prime Nette','Taxes','Garanties','Montants Garantis','Franchises','Date de Naissance','Nom Assuré','Profession'];
+
+  function isNumericField(col) { return col === 'Prime Totale TTC' || col === 'Prime Nette' || col === 'Taxes'; }
+
+  function buildGtMap(csvText) {
+    const rows = parseCsv(csvText);
+    if (!rows.length) return null;
+    const header = rows[0].map(h => h.trim());
+    const map = {};
+    for (let i = 1; i < rows.length; i++) {
+      const rec = {};
+      header.forEach((h, idx) => { rec[h] = rows[i][idx] != null ? rows[i][idx] : ''; });
+      if (rec['File Name']) map[rec['File Name'].trim()] = rec;
+    }
+    return map;
+  }
+
+  function fieldValue(fields, name) {
+    const v = fields[name];
+    if (v == null) return '';
+    return String(v);
+  }
+
+  function renderHeader() {
+    const thead = $('out').querySelector('thead');
+    const cols = ['File Name'].concat(FIELD_ORDER).concat(['Score']);
+    thead.innerHTML = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  }
+
+  async function runBenchmark() {
+    const apiKey = $('apiKey').value.trim() || state.apiKey;
+    const files = Array.from($('files').files);
+    const modelId = $('modelCustom').value.trim() || $('model').value;
+    const gtCsv = $('gt').value.trim();
+    if (!apiKey) { $('status').textContent = 'Error: API key required.'; return; }
+    if (!modelId) { $('status').textContent = 'Error: choose a model.'; return; }
+    if (!files.length) { $('status').textContent = 'Error: select the 11 PDFs.'; return; }
+    const gt = buildGtMap(gtCsv);
+    if (!gt) { $('status').textContent = 'Error: could not parse ground truth CSV.'; return; }
+
+    // pricing for live cost display
+    try {
+      const resp = await fetch('https://openrouter.ai/api/v1/models');
+      const data = await resp.json();
+      const m = (data.data || []).find(x => x.id === modelId);
+      if (m && m.pricing) modelPricing = m.pricing;
+    } catch (e) { modelPricing = null; }
+
+    costAccum = 0; tokenAccum = { prompt: 0, completion: 0 };
+    state.apiKey = apiKey;
+    state.model = modelId;
+    saveToStorage();
+
+    $('run').disabled = true;
+    $('status').textContent = 'Starting… (this runs the real pipeline per file)';
+
+    const results = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      $('status').textContent = `[${i+1}/${files.length}] ${f.name} …`;
+      try {
+        const buf = await f.arrayBuffer();
+        const res = await extractSingle(buf, f.name, '');
+        const expected = gt[f.name.trim()] || null;
+        results.push({ name: f.name, got: res.fields, method: res.method, aiError: res.aiError, priceWarning: res.priceWarning, expected, textLen: (res.text || '').length });
+      } catch (err) {
+        results.push({ name: f.name, got: null, method: 'error', aiError: String(err && err.message || err), expected: gt[f.name.trim()] || null });
+      }
+    }
+
+    renderResults(results, modelId, apiKey);
+    $('run').disabled = false;
+  }
+
+  function renderResults(results, modelId) {
+    const summary = $('summary');
+    const tbody = $('out').querySelector('tbody');
+    renderHeader();
+    tbody.innerHTML = '';
+
+    let totalComparable = 0, totalOk = 0, filesOk = 0;
+    const rowsHtml = [];
+
+    for (const r of results) {
+      const exp = r.expected || {};
+      const expFields = {};
+      GT_COLS.slice(1).forEach(c => { expFields[c] = exp[c] || ''; });
+
+      const perCell = {};
+      let comparable = 0, ok = 0;
+      for (const col of FIELD_ORDER) {
+        const g = (expFields[col] != null ? String(expFields[col]) : '').trim();
+        const got = r.got ? fieldValue(r.got, col) : '';
+        let cls = 'skip', note = got;
+        if (g !== '') {
+          comparable++;
+          if (isNumericField(col)) {
+            cls = (normalizeNum(g) && normalizeNum(g) === normalizeNum(got)) ? 'ok' : 'bad';
+          } else {
+            cls = normalize(g) === normalize(got) ? 'ok' : 'bad';
+          }
+          if (cls === 'ok') ok++;
+          note = cls === 'ok' ? got : `${got}`;
+        }
+        perCell[col] = { cls, note, expected: g };
+      }
+
+      const fileOk = (comparable === 0) ? true : (ok === comparable);
+      if (fileOk) filesOk++;
+      totalComparable += comparable; totalOk += ok;
+
+      const score = comparable ? Math.round(ok / comparable * 100) : 100;
+      const scoreCls = score === 100 ? 'good' : (score >= 60 ? 'mid' : 'bad');
+      const methodBadge = r.method === 'OpenRouter' ? '' : ` <span style="color:#b45309">(fallback: ${r.method})</span>`;
+      rowsHtml.push(`<tr>
+        <td style="white-space:nowrap">${r.name}${methodBadge}</td>
+        ${FIELD_ORDER.map(col => `<td class="${perCell[col].cls}" title="expected: ${perCell[col].expected || '(empty)'}">${perCell[col].note || '—'}</td>`).join('')}
+        <td><span class="score ${scoreCls}">${score}%</span></td>
+      </tr>`);
+    }
+
+    tbody.innerHTML = rowsHtml.join('');
+
+    const acc = totalComparable ? (totalOk / totalComparable * 100) : 0;
+    const accCls = acc === 100 ? 'good' : (acc >= 60 ? 'mid' : 'bad');
+    const modelLine = modelPricing ? ` | pricing in/out: $${modelPricing.prompt}/$${modelPricing.completion} per M` : '';
+    const cost = modelPricing ? `$${costAccum.toFixed(5)}` : '(model pricing not loaded)';
+    summary.innerHTML = `
+      <div style="margin-bottom:8px">
+        <b>${modelId}</b> — overall field accuracy <span class="score ${accCls}">${acc.toFixed(1)}%</span>
+        (${totalOk}/${totalComparable} comparable fields) — fully correct files: <b>${filesOk}/${results.length}</b>
+      </div>
+      <div class="meta">tokens used: ${tokenAccum.prompt} in / ${tokenAccum.completion} out | estimated cost: <b>${cost}</b>${modelLine}</div>
+    `;
+    $('status').textContent = 'Done.';
+  }
+
+  // populate model dropdown (hardcoded + live list)
+  async function initModels() {
+    const select = $('model');
+    select.innerHTML = '';
+    const add = (id, name, price) => {
+      const o = document.createElement('option');
+      o.value = id; o.textContent = `${name} — ${price || '?'}`;
+      select.appendChild(o);
+    };
+    for (const m of HARDCODED_MODELS) add(m.id, m.name, m.pricing ? `$${m.pricing.prompt}/M in` : null);
+    add('openai/gpt-4o-mini', 'GPT-4o Mini', '$0.15/M in');
+    add('qwen/qwen3-32b', 'Qwen3 32B', '$0.08/M in');
+    add('deepseek/deepseek-v4-flash-0731', 'DeepSeek V4 Flash 0731', '$0.09/M in');
+  }
+
+  $('gt').value = GT_DEFAULT;
+  $('apiKey').value = state.apiKey || '';
+  $('files').addEventListener('change', () => {
+    $('fileList').textContent = Array.from($('files').files).map(f => f.name).join(', ') || '';
+  });
+  $('loadGt').addEventListener('click', () => $('gtFile').click());
+  $('gtFile').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    $('gt').value = await f.text();
+  });
+  $('run').addEventListener('click', runBenchmark);
+  initModels();
+</script>
+</body>
+</html>
