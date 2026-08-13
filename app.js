@@ -29,6 +29,7 @@ const CATEGORIES = [
 let state = {
   apiKey: '',
   model: '',
+  provider: 'DigitalOcean',
   contracts: [],
   visibleFields: new Set(FIELD_NAMES),
   pdfCache: {}, // { fileName: Uint8Array }
@@ -137,6 +138,7 @@ function loadFromStorage() {
       const data = JSON.parse(raw);
       state.apiKey = data.apiKey || '';
       state.model = data.model || '';
+      state.provider = data.provider || 'DigitalOcean';
       state.contracts = data.contracts || [];
       if (data.visibleFields) state.visibleFields = new Set(data.visibleFields);
       if (data.fieldOrder) state.fieldOrder = data.fieldOrder;
@@ -154,6 +156,7 @@ function saveToStorage() {
     const data = {
       apiKey: state.apiKey,
       model: state.model,
+      provider: state.provider,
       contracts: state.contracts,
       visibleFields: [...state.visibleFields],
       fieldOrder: state.fieldOrder,
@@ -280,7 +283,8 @@ async function renderPdfPreview(pdfData, pageNum, scale = 1.5) {
 
 // ===================== OPENROUTER API =====================
 const HARDCODED_MODELS = [
-  { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3 (best accuracy)', pricing: { prompt: '0.2574', completion: '1.0287' } },
+  { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2 (recommended, cacheable)', pricing: { prompt: '0.269', completion: '0.40' } },
+  { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3 (best accuracy, no caching)', pricing: { prompt: '0.2574', completion: '1.0287' } },
   { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash (fast fallback)', pricing: { prompt: '0.14', completion: '0.28' } },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini (fast fallback)', pricing: { prompt: '0.15', completion: '0.60' } },
   { id: 'openai/gpt-4.1-nano', name: 'GPT-4.1 Nano (cheapest)', pricing: { prompt: '0.10', completion: '0.40' } },
@@ -319,7 +323,7 @@ async function callOpenRouter(pdfText, category) {
   const fieldNames = getFieldsForCategory(category);
   const truncated = buildPromptText(pdfText);
 
-  const prompt = `Extract data from a Moroccan ${category} insurance contract (Allianz/Sanlam).
+  const systemPrompt = `Extract data from a Moroccan ${category} insurance contract (Allianz/Sanlam).
 
 Return EXACTLY this JSON with these EXACT keys (use null if not found):
 ${JSON.stringify(Object.fromEntries(fieldNames.map(f => [f, 'value'])), null, 2)}
@@ -389,12 +393,12 @@ For ${category} contracts, Nom Assuré is often the same company as Souscripteur
 - When the contract lists a company as "personne morale / Raison sociale" AND a separate individual "Nom et Prénom" (e.g. conducteur habituel), Souscripteur/Nom Assuré = the Raison sociale (the company), NOT the individual.
 - Profession: always fill it when present (e.g. "CABINET DENTAIRE", "ENTREPRISE CONSTRUCTION"), even if it appears after the address.
 
-Return ONLY the JSON object — no markdown, no explanation, no extra text.
+Return ONLY the JSON object — no markdown, no explanation, no extra text.`;
 
-Contract text:
+  const userPrompt = `Contract text:
 ${truncated}`;
 
-  return openRouterRequest(prompt, fieldNames, 2000, 0);
+  return openRouterRequest(userPrompt, fieldNames, 2000, 0, `cloud-extract-${category}`, systemPrompt);
 }
 
 // Second-pass: when the price math check fails, ask the model to focus ONLY on the
@@ -402,12 +406,9 @@ ${truncated}`;
 async function recheckPrices(fields, text, category) {
   const fieldNames = ['Prime Totale TTC', 'Prime Nette', 'Taxes'];
   const current = fieldNames.map(f => `${f}: ${fields[f] != null ? fields[f] : 'null'}`).join('\n');
-  const prompt = `A Moroccan ${category} insurance contract (Allianz/Sanlam) was already partially extracted, but the amounts do NOT reconcile (Prime Totale TTC should equal Prime Nette + Taxes).
 
-Current (possibly wrong) values:
-${current}
+  const systemPrompt = `A Moroccan ${category} insurance contract (Allianz/Sanlam) was already partially extracted, but the amounts do NOT reconcile (Prime Totale TTC should equal Prime Nette + Taxes).
 
-From the contract text below, determine the CORRECT Prime Totale TTC, Prime Nette and Taxes.
 Rules:
 - Digits and dot only. No currency. Convert "10.000,00" → "10000.00".
 - Prime Nette comes from the DÉCOMPTE DE PRIME À PAYER section, NEVER the "Total" row of the garanties table.
@@ -417,20 +418,39 @@ Rules:
 Return EXACTLY this JSON with these EXACT keys (use null if a value is genuinely absent):
 ${JSON.stringify(Object.fromEntries(fieldNames.map(f => [f, 'value'])), null, 2)}
 
-Return ONLY the JSON object — no markdown, no extra text.
+Return ONLY the JSON object — no markdown, no extra text.`;
+
+  const userPrompt = `Current (possibly wrong) values:
+${current}
+
+From the contract text below, determine the CORRECT Prime Totale TTC, Prime Nette and Taxes.
 
 Contract text:
 ${buildPromptText(text)}`;
 
-  const result = await openRouterRequest(prompt, fieldNames, 1000, 0);
+  const result = await openRouterRequest(userPrompt, fieldNames, 1000, 0, `cloud-extract-${category}`, systemPrompt);
   return Object.keys(result).length ? result : null;
 }
 
-async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperature = 0) {
+async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperature = 0, sessionId = '', systemPrompt = '') {
   const maxRetries = 2;
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const body = {
+        model: state.model,
+        messages: systemPrompt
+          ? [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }]
+          : [{ role: 'user', content: prompt }],
+        temperature,
+        max_tokens: maxTokens
+      };
+      if (state.provider && state.provider !== 'auto') {
+        body.provider = { order: [state.provider] };
+      }
+      if (sessionId) {
+        body.session_id = sessionId;
+      }
       const resp = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -439,12 +459,7 @@ async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperatu
           'HTTP-Referer': window.location.origin,
           'X-Title': 'Cloud Extract'
         },
-        body: JSON.stringify({
-          model: state.model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature,
-          max_tokens: maxTokens
-        })
+        body: JSON.stringify(body)
       });
 
       if (!resp.ok) {
@@ -846,7 +861,7 @@ function checkPriceConsistency(fields, fullText) {
   }
   const gap = Math.abs(ttc - nette - (isNaN(taxes) ? 0 : taxes));
   if (gap <= Math.max(1, ttc * 0.05)) return true;
-  if (fullText && /Accessoires\b/i.test(fullText) && gap <= ttc * 0.2) return true;
+  if (fullText && /Accessoires|Assistance/i.test(fullText) && gap <= ttc * 0.2) return true;
   return false;
 }
 
@@ -857,6 +872,15 @@ async function detectCategory(text) {
   const prompt = `Classify this insurance contract into exactly one category:\n${catList}\n\nReturn ONLY the category code (e.g., "RC", "AT", "AUTO", "Habitation", "Individuelle Accidents", "Schengen Visa") — no explanation.\n\nContract text:\n${text.slice(0, 2000)}`;
 
   try {
+    const body = {
+      model: state.model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0,
+      max_tokens: 20
+    };
+    if (state.provider && state.provider !== 'auto') {
+      body.provider = { order: [state.provider] };
+    }
     const resp = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -865,12 +889,7 @@ async function detectCategory(text) {
         'HTTP-Referer': window.location.origin,
         'X-Title': 'Cloud Extract'
       },
-      body: JSON.stringify({
-        model: state.model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0,
-        max_tokens: 20
-      })
+      body: JSON.stringify(body)
     });
     if (!resp.ok) return null;
     const data = await resp.json();
@@ -1415,15 +1434,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('saveSettingsBtn').addEventListener('click', () => {
     const apiKey = document.getElementById('apiKeyInput').value.trim();
     const model = document.getElementById('modelSelect').value;
+    const provider = document.getElementById('providerSelect').value;
     state.apiKey = apiKey;
     state.model = model;
+    state.provider = provider || 'DigitalOcean';
     saveToStorage();
     const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
     if (modal) modal.hide();
     showStatus('Settings saved.', 'success');
   });
 
-  document.getElementById('settingsModal').addEventListener('show.bs.modal', refreshModelList);
+  document.getElementById('settingsModal').addEventListener('show.bs.modal', () => {
+    refreshModelList();
+    const providerSelect = document.getElementById('providerSelect');
+    if (providerSelect) providerSelect.value = state.provider;
+  });
 
   // Toggle API key visibility
   document.getElementById('toggleKeyBtn').addEventListener('click', () => {

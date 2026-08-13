@@ -181,6 +181,18 @@
             </button>
           </div>
         </div>
+        <div class="mb-3">
+          <label class="form-label">Provider</label>
+          <select id="providerSelect" class="form-select">
+            <option value="DigitalOcean">DigitalOcean (default, prompt caching)</option>
+            <option value="DeepInfra">DeepInfra</option>
+            <option value="StreamLake">StreamLake</option>
+            <option value="AtlasCloud">AtlasCloud</option>
+            <option value="Novita">Novita</option>
+            <option value="auto">Auto (balanced routing)</option>
+          </select>
+          <div class="form-text">Pinning one provider keeps the prompt cache warm across your batch.</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
