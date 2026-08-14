@@ -393,12 +393,12 @@ For ${category} contracts, Nom Assuré is often the same company as Souscripteur
 - When the contract lists a company as "personne morale / Raison sociale" AND a separate individual "Nom et Prénom" (e.g. conducteur habituel), Souscripteur/Nom Assuré = the Raison sociale (the company), NOT the individual.
 - Profession: always fill it when present (e.g. "CABINET DENTAIRE", "ENTREPRISE CONSTRUCTION"), even if it appears after the address.
 
-Return ONLY the JSON object — no markdown, no explanation, no extra text.`;
+Return ONLY the JSON object — no markdown, no explanation, no extra text.
 
-  const userPrompt = `Contract text:
+Contract text:
 ${truncated}`;
 
-  return openRouterRequest(userPrompt, fieldNames, 2000, 0, `cloud-extract-${category}`, systemPrompt);
+  return openRouterRequest(prompt, fieldNames, 2000, 0, `cloud-extract-${category}`);
 }
 
 // Second-pass: when the price math check fails, ask the model to focus ONLY on the
@@ -406,9 +406,12 @@ ${truncated}`;
 async function recheckPrices(fields, text, category) {
   const fieldNames = ['Prime Totale TTC', 'Prime Nette', 'Taxes'];
   const current = fieldNames.map(f => `${f}: ${fields[f] != null ? fields[f] : 'null'}`).join('\n');
+  const prompt = `A Moroccan ${category} insurance contract (Allianz/Sanlam) was already partially extracted, but the amounts do NOT reconcile (Prime Totale TTC should equal Prime Nette + Taxes).
 
-  const systemPrompt = `A Moroccan ${category} insurance contract (Allianz/Sanlam) was already partially extracted, but the amounts do NOT reconcile (Prime Totale TTC should equal Prime Nette + Taxes).
+Current (possibly wrong) values:
+${current}
 
+From the contract text below, determine the CORRECT Prime Totale TTC, Prime Nette and Taxes.
 Rules:
 - Digits and dot only. No currency. Convert "10.000,00" → "10000.00".
 - Prime Nette comes from the DÉCOMPTE DE PRIME À PAYER section, NEVER the "Total" row of the garanties table.
@@ -418,30 +421,23 @@ Rules:
 Return EXACTLY this JSON with these EXACT keys (use null if a value is genuinely absent):
 ${JSON.stringify(Object.fromEntries(fieldNames.map(f => [f, 'value'])), null, 2)}
 
-Return ONLY the JSON object — no markdown, no extra text.`;
-
-  const userPrompt = `Current (possibly wrong) values:
-${current}
-
-From the contract text below, determine the CORRECT Prime Totale TTC, Prime Nette and Taxes.
+Return ONLY the JSON object — no markdown, no extra text.
 
 Contract text:
 ${buildPromptText(text)}`;
 
-  const result = await openRouterRequest(userPrompt, fieldNames, 1000, 0, `cloud-extract-${category}`, systemPrompt);
+  const result = await openRouterRequest(prompt, fieldNames, 1000, 0, `cloud-extract-${category}`);
   return Object.keys(result).length ? result : null;
 }
 
-async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperature = 0, sessionId = '', systemPrompt = '') {
+async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperature = 0, sessionId = '') {
   const maxRetries = 2;
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const body = {
         model: state.model,
-        messages: systemPrompt
-          ? [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }]
-          : [{ role: 'user', content: prompt }],
+        messages: [{ role: 'user', content: prompt }],
         temperature,
         max_tokens: maxTokens
       };
