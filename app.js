@@ -323,7 +323,7 @@ async function callOpenRouter(pdfText, category) {
   const fieldNames = getFieldsForCategory(category);
   const truncated = buildPromptText(pdfText);
 
-  const systemPrompt = `Extract data from a Moroccan ${category} insurance contract (Allianz/Sanlam).
+  const prompt = `Extract data from a Moroccan ${category} insurance contract (Allianz/Sanlam).
 
 Return EXACTLY this JSON with these EXACT keys (use null if not found):
 ${JSON.stringify(Object.fromEntries(fieldNames.map(f => [f, 'value'])), null, 2)}
