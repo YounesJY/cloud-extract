@@ -401,130 +401,6 @@ ${truncated}`;
   return openRouterRequest(prompt, fieldNames, 2000, 0, `cloud-extract-${category}`);
 }
 
-// Step B: merge category detection INTO the extraction call — one request returns
-// { category, fields }. Prompt rules duplicate the validated callOpenRouter rules
-// verbatim (only the classification line is added) so extraction quality is unchanged.
-async function callOpenRouterWithDetect(pdfText) {
-  const allFields = [...new Set([...FIELD_NAMES, ...Object.values(CATEGORY_FIELDS).flat()])];
-  const truncated = buildPromptText(pdfText);
-  const catList = CATEGORIES.map(([val, label]) => `${val}: ${label}`).join('\n');
-
-  const prompt = `Classify this Moroccan insurance contract (Allianz/Sanlam) into one category, then extract its data.
-
-CATEGORY — pick EXACTLY ONE from:
-${catList}
-
-Return EXACTLY this JSON:
-{
-  "category": "<one of the category codes above, e.g. RC, AT, AUTO, Habitation, Individuelle Accidents, Schengen Visa>",
-  "fields": {
-    <field>: "<value>",
-    ...
-  }
-}
-
-Fields (use null if not found or not applicable):
-${JSON.stringify(Object.fromEntries(allFields.map(f => [f, 'value'])), null, 2)}
-
-RULES — Follow exactly:
-
-CRITICAL — Distinguish these codes carefully:
-- Police Num = CONTRACT/POLICY number. Look near 'N° Police', 'Police N°', 'N° police'. NEVER use the word "Attestation" as Police Num — an attestation is the document, not the policy number (e.g. N° Police "33B5795", N° Attestation "203472207" are DIFFERENT values).
-- Attestation = the attestation/certificate number. Look near 'N° Attestation'. Only fill when the document is an attestation (often the header of these short-form auto contracts).
-- N° Client / N° Souscripteur = CLIENT identifier (e.g. 5558134). Look near 'N° Client', 'N° Souscripteur', 'Numéro client'. Can be alphanumeric like MG1401.
-- Code Intermédiaire = SHORT intermediary code (3-8 digits). NOT a long description or name.
-- CIN = National ID card number. Format: 1-2 letters followed by 4-10 digits (e.g. EE123456, A123456). Never a word like 'traitant', 'cabinet', 'gérant'.
-- Téléphone = 10-digit Moroccan phone starting with 0. If looks like phone (06xx, 07xx, 05xx), put in Téléphone, NOT Police Num.
-
-NAMES — CLIENT vs INTERMEDIARY vs CONDUCTEUR (very important in these attestation formats):
-- The "Intermédiaire" (broker/agent, e.g. "AKRAM EL KASSAD ASSURANCES SARL") is the intermediary, NOT the client.
-- Souscripteur and Nom Assuré = the CLIENT (the person/company being insured), e.g. "Mme AMAQRAN Dounya".
-- Use the name under the "Souscripteur" block first. If that block is absent or empty, use "Propriétaire du Véhicule". ONLY use "Conducteur Habituel" when neither Souscripteur nor Propriétaire du Véhicule is available.
-- CRITICAL: "Conducteur Habituel" may be a DIFFERENT person than the client (e.g. Souscripteur "SAMMOU ALI", Conducteur habituel "SAMMOU MOHAMED"). Do NOT use the conducteur as Souscripteur/Nom Assuré when a Souscripteur/Propriétaire block exists.
-- Date de Naissance = the CLIENT's birth date (the same person chosen for Souscripteur/Nom Assuré), NOT the conducteur's.
-- NEVER use the intermediary's name as Souscripteur or Nom Assuré, even though it appears first in the document.
-
-NUMBERS (Prime Totale TTC, Prime Nette, Taxes):
-- Digits and dot only. NO currency (DH, MAD, dhs, €, $, Dirhams)
-- Convert comma to dot: "10.000,00" → "10000.00" (remove thousand separators)
-- MATH CHECK: Prime Totale TTC = Prime Nette + Taxes (+ small extras). TTC MUST be >= Prime Nette and >= Taxes. If your amounts break this, you picked the wrong numbers — re-read the text.
-- In Allianz/Sanlam tables the amount often appears BEFORE its label on the same line:
-  "1 411,20Prime nette"  → Prime Nette = 1411.20
-  "208,42208,42Taxes"    → Taxes = 208.42 (the same number may repeat twice — use one copy)
-  "Prime Total TTC 1 761,98 1 761,98" → Prime Totale TTC = 1761.98
-  "1 198,00Prime TTC (en DH) :" → Prime Totale TTC = 1198.00
-- The amount may also sit alone on the line just above or below its label — search nearby lines and pair each label with its nearest amount.
-- NEVER use "prime minimale", "prime minimale de 10 000", "Prime nette annuelle minimale" or a franchise "minimum de X DH" as Prime Totale TTC — those are minimums/floors, NOT the total premium.
-- Prime Nette: use the amount in the DÉCOMPTE DE PRIME À PAYER / payment section. NEVER use the "Total" row at the bottom of the garanties/primes table (e.g. "Total 4 760,70") as Prime Nette — use the nette inside the décompte (e.g. "4 409,05").
-- Taxes = the labeled "Taxes"/"Taxes au comptant" amount, ALONE. Do NOT add "Taxe parafiscale FSEC" or anything else on top of it (e.g. "Taxes au comptant : 99,79" plus "Taxe parafiscale FSEC : 10,69" → Taxes = 99.79, NOT 110.48).
-- ONLY if there is NO "Taxes"/"Taxes au comptant" label anywhere: use the "Taxe parafiscale au profit du FSEC" amount; when several tax lines exist (FSEC + Taxe NARSA), return their SUM (e.g. 773,09 + 115,74 = 888,83).
-- Never use "Prime événements catastrophiques" or "Accessoires"/"Assistance" as Taxes.
-- Round to at most 2 decimals (e.g. 208.4220842 is wrong — it is 208.42).
-
-DATES:
-- Date d'effet = START (earlier), Date d'échéance = END (later)
-- CRITICAL: effet date MUST be earlier than échéance — swap if reversed
-- Format: DD/MM/YYYY only
-- When the text shows a date range spanning roughly one year, the earlier date is the effet and the later is the échéance. Beware pypdf column scrambling: verify dates against adjacent labels ("Date d'effet", "Date d'échéance", "Renouvelable").
-
-PHONE:
-- 10-digit Moroccan number starting with 0 (e.g. 0522499700)
-- Digits only: remove spaces, +212, parentheses, hyphens
-- If you see 9 digits, add leading 0
-
-MONTANTS GARANTIS (per-guarantee amounts):
-- Output amounts in the SAME ORDER as the Garanties list, one value per guarantee, comma-separated.
-- Pair each amount with its own guarantee label. Example: "Bris d'enseignes | 10 000,00" → 10000.00, NOT 0.00. A trailing "0,00" next to a Garanti/Non-Garanti checkbox is NOT the amount.
-- Never output 0.00 for a guarantee that has a real value.
-
-FRANCHISES:
-- Franchises are the "minimum de X DH" / "X% du montant des dommages" clauses in the guarantee table's Franchise column, or a "Franchise" section.
-- Example: "Franchise | 15% du montant des dommages avec un minimum de 10 000 DH | Franchise | 15% du montant des dommages avec un minimum de 20 000 DH" → "15% du montant des dommages avec un minimum de 10000 DH, 15% du montant des dommages avec un minimum de 20000 DH".
-- If the contract has franchise clauses, ALWAYS fill Franchises — do not leave it empty.
-
-NAMES (Souscripteur, Nom Assuré): UPPERCASE
-- Output the name exactly as written. Do NOT merge checkbox/civil-status labels into the name:
-  e.g. "Mme Mlle M. X Sté" followed by "CHARI DONIA" → "CHARI DONIA" (NOT "STÉCHARI DONIA"),
-  "Sté" is a checkbox label meaning société, never part of the person's name.
-- Only keep a legal suffix (SARL, SA, S.A.R.L) if it is actually part of the written company name.
-- When the contract lists a company as "personne morale / Raison sociale" AND a separate individual "Nom et Prénom" (e.g. conducteur habituel), Souscripteur/Nom Assuré = the Raison sociale (the company), NOT the individual.
-- Profession: always fill it when present (e.g. "CABINET DENTAIRE", "ENTREPRISE CONSTRUCTION"), even if it appears after the address.
-
-For company (personne morale) contracts, Nom Assuré is often the same company as Souscripteur.
-
-Return ONLY the JSON object — no markdown, no explanation, no extra text.
-
-Contract text:
-${truncated}`;
-
-  return openRouterRequest(prompt, allFields, 2500, 0, 'cloud-extract-detect', parseDetectResponse);
-}
-
-// Parse the merged { category, fields } response.
-function parseDetectResponse(text) {
-  text = String(text || '').replace(/```(?:json)?\s*/g, '').replace(/```\s*/g, '').trim();
-  const jsonStart = text.indexOf('{');
-  const jsonEnd = text.lastIndexOf('}');
-  if (jsonStart >= 0 && jsonEnd > jsonStart) text = text.slice(jsonStart, jsonEnd + 1);
-  try {
-    const parsed = JSON.parse(text);
-    const category = parsed.category;
-    const valid = CATEGORIES.some(([val]) => val === category);
-    if (!valid) return { category: '', fields: {} };
-    const rawFields = parsed.fields || {};
-    const fields = {};
-    for (const [k, v] of Object.entries(rawFields)) {
-      if (v !== null && v !== undefined && v !== '') {
-        const str = Array.isArray(v) ? v.join(', ') : String(v);
-        if (str.trim()) fields[k] = str.trim();
-      }
-    }
-    return { category, fields };
-  } catch {
-    return { category: '', fields: {} };
-  }
-}
-
 // Second-pass: when the price math check fails, ask the model to focus ONLY on the
 // three price fields and fix them from the contract text (temperature 0).
 async function recheckPrices(fields, text, category) {
@@ -554,7 +430,7 @@ ${buildPromptText(text)}`;
   return Object.keys(result).length ? result : null;
 }
 
-async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperature = 0, sessionId = '', parseFn) {
+async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperature = 0, sessionId = '') {
   const maxRetries = 2;
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -591,7 +467,6 @@ async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperatu
 
       const data = await resp.json();
       const content = data.choices?.[0]?.message?.content || '';
-      if (parseFn) return parseFn(content);
       return parseJsonResponse(content, fieldNames);
     } catch (err) {
       lastErr = err;
@@ -1027,6 +902,17 @@ async function extractSingle(pdfData, fileName, category) {
   const text = await extractTextFromPdf(pdfData);
   console.log('extractSingle text length:', text?.length);
 
+  // Auto-detect category only when not already set (saves one request per file)
+  if (!category) {
+    const detected = await detectCategory(text);
+    if (detected) {
+      console.log(`Category auto-detected: (none) -> ${detected}`);
+      category = detected;
+    } else {
+      category = 'RC';
+    }
+  }
+
   let fields = {};
   let rawResponse = '';
   let method = 'regex';
@@ -1034,35 +920,9 @@ async function extractSingle(pdfData, fileName, category) {
 
   if (state.apiKey && state.model) {
     try {
-      // Step B: when no category is set, detect + extract in a single request.
-      if (!category) {
-        const merged = await callOpenRouterWithDetect(text);
-        if (merged && merged.category && Object.keys(merged.fields).length) {
-          category = merged.category;
-          // Keep only fields valid for the detected category (drop other categories' extras).
-          const allowed = getFieldsForCategory(category);
-          fields = {};
-          for (const f of allowed) {
-            if (merged.fields[f] != null) fields[f] = merged.fields[f];
-          }
-          method = 'OpenRouter';
-          console.log(`Category + fields from merged call: ${category}`);
-        } else if (merged && merged.category) {
-          // Category detected but no fields returned — use it and re-extract below.
-          category = merged.category;
-          console.log(`Merged call gave category ${category} but no fields; re-extracting.`);
-        }
-      }
-      // Silent fallback: category still missing/bad → old detect call, then extract.
-      if (!category) {
-        const detected = await detectCategory(text);
-        category = detected || 'RC';
-      }
-      if (Object.keys(fields).length === 0) {
-        const result = await callOpenRouter(text, category);
-        fields = result;
-        method = 'OpenRouter';
-      }
+      const result = await callOpenRouter(text, category);
+      fields = result;
+      method = 'OpenRouter';
     } catch (err) {
       aiError = (err && err.message) ? err.message.slice(0, 300) : String(err);
       console.warn('OpenRouter failed, using regex fallback:', err);
