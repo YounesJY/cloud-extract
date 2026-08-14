@@ -19,6 +19,12 @@
   returned correct values on one run and wrong on the next (ContratDocument (12) TTC 7250→10000,
   AMAQRAN 513.31→830.83, both picking the "prime minimale 10 000" floor). Single-message prompts
   (`[{ role: 'user', content }]`) restored and stable.
+- **Step B (merged category detection + extraction) reverted.** A single `{category, fields}`
+  request (detect folded into the union prompt) dropped critical fields to 94.3% (181/192) vs
+  Step A's 100% on the 16-file suite: AMAQRAN `Prime Totale TTC` regressed 513.31→830.83 (same
+  "prime minimale" trap as the prompt split), Attestation (8) lost `CIN` + `Taxes`, and `Taxes`
+  shifted on several attestations. Reverted to Step A behaviour (2 requests/file on fresh
+  Auto-detect uploads). Lesson: the standalone detect prompt steadies extraction.
 
 ## [1.8.3] — 2026-08-06
 

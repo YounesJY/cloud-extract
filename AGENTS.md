@@ -92,10 +92,16 @@ The base flow is **2 requests/file (detect + extract) + 1 conditional recheck**.
   preset-category uploads drop to **18 requests (16 extract + 2 recheck), 0 detects**. Upload
   dropdown default is now "Auto-detect" (`""`) so fresh mixed uploads still detect (34 requests) —
   the tradeoff accepted: preset categories are no longer auto-corrected.
-- **Step B (PLANNED):** merge category detection INTO the extraction call — single request that
-  returns `{ category, fields }`, with `detectCategory` kept as a silent fallback for missing/bad
-  category. Would bring the fresh-upload path to ~18 too. Gated: verify 16-file diff; revert via
-  git if any priority field regresses.
+- **Step B (REVERTED 2026-08-14):** merge category detection INTO the extraction call — single
+  request returns `{ category, fields }`, `detectCategory` kept as silent fallback. Implemented and
+  tested on the fresh Auto-detect 16-file upload (17 requests = 16 merged + 1 recheck, 0 separate
+  detects, all DigitalOcean, cache 35%). **GATE FAILED:** critical fields dropped to 94.3%
+  (181/192) vs Step A's 100%. **AMAQRAN `Prime Totale TTC` regressed 513.31 → 830.83** — the same
+  "prime minimale" trap the prompt-split caused — and Attestation (8) lost `CIN` (N85877) +
+  `Taxes` (286.89→164.90), plus Taxes shifted on Attestation (7)/(9)/(10) and ContratDocument
+  (9)/(11). Reverted via git (`c1d5c8f`); Step A behaviour restored. **Lesson:** the standalone
+  `detectCategory` prompt steadies extraction; folding classification into the union prompt
+  re-introduces the price trap. The 2-request fresh-upload path stays.
 - **Registry refactor was explicitly REJECTED** (over-engineering): only 2–3 new categories/yr and
   0–1 format changes/yr. Cheap maintainability = this AGENTS.md doc + prompt rules as a named constant.
 
