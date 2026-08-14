@@ -902,11 +902,15 @@ async function extractSingle(pdfData, fileName, category) {
   const text = await extractTextFromPdf(pdfData);
   console.log('extractSingle text length:', text?.length);
 
-  // Auto-detect category from text
-  const detected = await detectCategory(text);
-  if (detected && detected !== category) {
-    console.log(`Category auto-detected: ${category} -> ${detected}`);
-    category = detected;
+  // Auto-detect category only when not already set (saves one request per file)
+  if (!category) {
+    const detected = await detectCategory(text);
+    if (detected) {
+      console.log(`Category auto-detected: (none) -> ${detected}`);
+      category = detected;
+    } else {
+      category = 'RC';
+    }
   }
 
   let fields = {};

@@ -27,7 +27,7 @@ The browser fetches `https://openrouter.ai/api/v1/chat/completions`. No proxy ne
 
 1. User uploads PDF(s) — binary stored in IndexedDB, shows upload progress
 2. pdf.js extracts text with spatial positioning (letter grouping by Y)
-3. AI auto-detects contract category (RC, AT, AUTO, etc.) from text
+3. AI auto-detects contract category (RC, AT, AUTO, etc.) from text — **only when the category is not already set** (saves one request per file); fresh uploads with the "Auto-detect" default get detected, re-extractions reuse the stored category
 4. Cleaned text sent to OpenRouter with category-specific prompt (temperature 0 for determinism)
    - Long texts are truncated (max 12000 chars) but always keep the head **and** the PRIME/pricing section
 5. AI response parsed + cross-validated against PDF text via regex
@@ -78,7 +78,7 @@ OpenRouter catalogue rates per 1M tokens (05/08/2026).
 - PDF selector dropdown to switch between uploaded files
 
 ### Extraction
-- Auto-detect category via AI before extraction
+- Auto-detect category via AI only when category is not already set (saves 1 request/file); "Auto-detect" is the default upload option
 - OpenRouter AI with regex fallback (`regexExtract`); pricing fields use a dedicated regex layer (`fillPriceFields`) with label-first + value-before-label amount pairing
 - AI API failures are surfaced in the UI: Method badge shows "regex (AI fail)" (error on hover), status bar reports fallback count
 - OpenRouter 4xx errors (401/402/403/404) are NOT retried — they fail fast
