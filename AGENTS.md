@@ -41,27 +41,70 @@ OpenRouter catalogue rates per 1M tokens (05/08/2026).
 
 | Model | ID (OpenRouter) | Input | Output | Accuracy (test) | Role |
 |---|---|---|---|---|---|
-| DeepSeek V3 | `deepseek/deepseek-chat` | $0.2574 | $1.0287 | 11/11 (100%) | **Default (recommended)** |
+| DeepSeek V3.2 | `deepseek/deepseek-v3.2` | $0.269 | $0.40 | 16/16 critical (100%) | **Default (recommended, cacheable)** |
+| DeepSeek V3 | `deepseek/deepseek-chat` | $0.2574 | $1.0287 | 11/11 (100%) | Fallback (best accuracy, no caching tier) |
 | DeepSeek V4 Flash | `deepseek/deepseek-v4-flash` | $0.14 | $0.28 | ~4/11 | Fast fallback |
 | GPT-4o Mini | `openai/gpt-4o-mini` | $0.15 | $0.60 | Good | Fallback |
 | GPT-4.1 Nano | `openai/gpt-4.1-nano` | $0.10 | $0.40 | Good | Cheap fallback |
 | Gemini 2.0 Flash | `google/gemini-2.0-flash-exp` | $0 | $0 | Basic | Free tier |
 
 ### Model decision (2026-08-05)
-- **DeepSeek V3 is the default.** Tested against 11 real contracts it scored **11/11**, while
+- **DeepSeek V3 was the original default.** Tested against 11 real contracts it scored **11/11**, while
   DeepSeek V4 Flash 0423 scored ~4/11 and V4 Flash 0731 ~2/11 (Flash models confuse agency address
   with client, extract placeholder labels like `/prénom ou raison sociale :`, take phone numbers for
   the insured name, and produce missing/wrong amounts).
 - V4 Flash models are NOT used because accuracy loss outweighs the ~2× cheaper price.
+
+### Model decision (2026-08-14) — V3.2 is now the default
+- **DeepSeek V3.2 (`deepseek/deepseek-v3.2`) is the default.** On the 16-file suite it scored
+  **16/16 on critical identity/pricing fields (100%)**, identical accuracy to V3. Two extra reasons
+  it wins over V3: **prompt caching is billed** (V3 has no published cache tier) and output is
+  cheaper ($0.40 vs $1.0287/1M). V3 remains in the list as a best-accuracy fallback.
 - **Cost at max volume (1,500 PDF/mo): ~$4/mo (~$50/yr)** — negligible. ~$0.003/file.
-- **Speed is sufficient:** OpenRouter routes V3 at ~21–30 tok/s (~0.7–1.2s TTFT); a ~900-token
+- **Speed is sufficient:** OpenRouter routes V3/V3.2 at ~21–30 tok/s (~0.7–1.2s TTFT); a ~900-token
   extraction takes ~30–45s (~10–15s per document across 50/day, or overnight batch).
-- **Paid vs free:** DeepSeek V3 is a paid model only (not on the `:free` tier). The free tier
+- **Paid vs free:** DeepSeek V3/V3.2 are paid-only (not on the `:free` tier). The free tier
   (Gemini 2.0 Flash, `:free` variants) is rate-limited (~20 req/min, ~1000 req/day) and unstable at
   this volume.
-- **Prompt caching note:** OpenRouter publishes no cached-input price for V3; repeats are billed at
-  full input rate. Revisit when they add a cache tier.
+- **Prompt caching is ENABLED** for V3.2 (billed at reduced input rate). Each category uses a stable
+  `session_id` (`cloud-extract-{category}`) so repeated extractions of the same category hit the
+  cache. Measured: ~35% prompt-cache rate, ~26% cost savings on the Step A run.
 - Costs below reused by the LeTeX report at `Rapport_Modeles_Cout.tex`.
+
+### Provider pinning (2026-08-14)
+- All requests pin `provider.order: [state.provider]` (default **DigitalOcean**) when a provider is
+  selected; the Settings modal has a provider dropdown. Measured effect: DigitalOcean served 100% of
+  a 34-request run with stable output (OpenRouter routes DeepSeek across providers otherwise).
+- Provider choice + API key are persisted in `localStorage`.
+
+### Prompt structure (2026-08-14) — single-message prompts ONLY
+- **Do NOT split prompts into system/user.** A system+user split at temperature 0 caused
+  **flapping** (same file returned correct on one run, wrong on the next): ContratDocument (12) TTC
+  7250→10000 and AMAQRAN 513.31→830.83, both picking the "prime minimale 10 000" floor as TTC.
+  Reverted to single-message prompts (`[{ role: 'user', content }]`) in `callOpenRouter` and
+  `recheckPrices`; the instability disappeared and the pre-split consensus values returned.
+  This is a hard constraint for any future prompt changes.
+
+### Request-count plan (2026-08-14)
+The base flow is **2 requests/file (detect + extract) + 1 conditional recheck**. Measured on the
+16-file suite: 34 requests (16 detect + 16 extract + 2 recheck) before optimization.
+- **Step A (DONE):** skip `detectCategory` when a category is already set → re-extractions and
+  preset-category uploads drop to **18 requests (16 extract + 2 recheck), 0 detects**. Upload
+  dropdown default is now "Auto-detect" (`""`) so fresh mixed uploads still detect (34 requests) —
+  the tradeoff accepted: preset categories are no longer auto-corrected.
+- **Step B (PLANNED):** merge category detection INTO the extraction call — single request that
+  returns `{ category, fields }`, with `detectCategory` kept as a silent fallback for missing/bad
+  category. Would bring the fresh-upload path to ~18 too. Gated: verify 16-file diff; revert via
+  git if any priority field regresses.
+- **Registry refactor was explicitly REJECTED** (over-engineering): only 2–3 new categories/yr and
+  0–1 format changes/yr. Cheap maintainability = this AGENTS.md doc + prompt rules as a named constant.
+
+### How to add a category or form
+1. Add the code to `CATEGORIES` (app.js) and a `CATEGORY_FIELDS` entry (extra fields beyond the base `FIELD_NAMES`).
+2. Add the option to the upload dropdown and batch dropdown in `index.html`.
+3. Add any category-specific prompt rules to `callOpenRouter` (single-message prompt, see constraint above).
+4. Add any deterministic post-fix (e.g. `fixAssurAutoClientIdentity`) and cross-validation rule.
+5. Validate against at least one real PDF of that form and record the result in README "Extraction Accuracy".
 
 ## Features
 
@@ -102,6 +145,7 @@ OpenRouter catalogue rates per 1M tokens (05/08/2026).
 ### Settings
 - API key with show/hide toggle
 - Live model list from OpenRouter API (fallback to hardcoded)
+- Provider dropdown (default DigitalOcean) — requests pin `provider.order`
 - Batch category set for all contracts
 - Dark mode toggle with persistent preference
 

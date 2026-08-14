@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.9.0] — 2026-08-14
+
+### Changed
+- **Default model switched to DeepSeek V3.2** (`deepseek/deepseek-v3.2`): same 100% critical-field
+  accuracy as V3 on the 16-file suite, but output is cheaper ($0.40 vs $1.0287/1M) and prompt
+  caching is billed for it (V3 has no cache tier). V3 remains as a best-accuracy fallback.
+- **Prompt caching enabled** for V3.2 via a stable per-category `session_id`
+  (`cloud-extract-{category}`). Measured ~35% cache rate / ~26% cost savings on a 16-file run.
+- **Provider pinning:** new Settings provider dropdown (default **DigitalOcean**); every request
+  sends `provider.order: [provider]`. DigitalOcean served 100% of requests with stable output.
+- **Step A: category auto-detection is skipped when a category is already set** — saves 1 request
+  per file on re-extractions and preset-category uploads (34 → 18 requests on the 16-file suite).
+  The upload dropdown default is now "Auto-detect" (`""`); fresh mixed uploads still detect.
+
+### Reverted (kept as regression note)
+- **System/user prompt split removed.** A split at temperature 0 caused **flapping** — the same file
+  returned correct values on one run and wrong on the next (ContratDocument (12) TTC 7250→10000,
+  AMAQRAN 513.31→830.83, both picking the "prime minimale 10 000" floor). Single-message prompts
+  (`[{ role: 'user', content }]`) restored and stable.
+
 ## [1.8.3] — 2026-08-06
 
 ### Fixed
