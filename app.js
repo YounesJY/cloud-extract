@@ -444,7 +444,7 @@ async function openRouterRequest(prompt, fieldNames, maxTokens = 2000, temperatu
         max_tokens: maxTokens
       };
       if (state.provider && state.provider !== 'auto') {
-        body.provider = { order: [state.provider] };
+        body.provider = { order: ["DigitalOcean"] };
       }
       if (sessionId) {
         body.session_id = sessionId;
@@ -877,7 +877,7 @@ async function detectCategory(text) {
       max_tokens: 20
     };
     if (state.provider && state.provider !== 'auto') {
-      body.provider = { order: [state.provider] };
+      body.provider = { order: ["DigitalOcean"] };
     }
     const resp = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
