@@ -416,7 +416,9 @@ Rules:
 - Digits and dot only. No currency. Convert "10.000,00" → "10000.00".
 - Prime Nette comes from the DÉCOMPTE DE PRIME À PAYER section, NEVER the "Total" row of the garanties table.
 - Taxes = the labeled "Taxes"/"Taxes au comptant" amount ALONE (never add FSEC on top). Only when there is no such label, use FSEC (sum FSEC + NARSA when both exist).
-- Prime Totale TTC must be >= Prime Nette and >= Taxes.
+- HARD MATH RULE: Prime Totale TTC MUST equal Prime Nette + Taxes (within 5%). If the value you are about to return does NOT satisfy this, you picked the wrong amount.
+- NEVER return a "prime minimale"/"prime minimale de X DH"/"franchise minimum de X DH" or the "Total" row of a table as Prime Totale TTC or Prime Nette — those are floors, not the real premium.
+- If a value fails the math check, keep scanning the text for the amount that reconciles (Prime Totale TTC = Prime Nette + Taxes).
 
 Return EXACTLY this JSON with these EXACT keys (use null if a value is genuinely absent):
 ${JSON.stringify(Object.fromEntries(fieldNames.map(f => [f, 'value'])), null, 2)}
@@ -786,7 +788,7 @@ function priceIsPlausible(field, val, fields) {
   return true;
 }
 
-function fillPriceFields(fields, fullText) {
+function fillPriceFields(fields, fullText, force) {
   // Number pattern for one French-format amount: "1 411,20", "208,42", "7 250,00", "1761,98"
   // (thousands separator may be space, NBSP, dot, or comma — or absent)
   const AMT = '(?:\\d{1,3}(?:[ ,.\\u00A0]\\d{3})*(?:,\\d{1,2})?|\\d{4,6}(?:,\\d{1,2})?)';
@@ -819,7 +821,7 @@ function fillPriceFields(fields, fullText) {
     const current = toNum(fields[field]);
     const plausible = priceIsPlausible(field, current, fields);
     const trapped = field === 'Prime Totale TTC' && isTtcTrap();
-    if (fields[field] && plausible && !trapped) return;
+    if (fields[field] && plausible && !trapped && !force) return;
     for (const re of regexes) {
       const m = fullText.match(re);
       if (!m || m[1] == null) continue;
@@ -834,7 +836,7 @@ function fillPriceFields(fields, fullText) {
   // Stage 1: reliable "Prime TTC" labels (label-first or mashed value-first)
   fill('Prime Totale TTC', strongTtc);
   // Stage 2: "Prime au comptant" = total payable (fees+taxes included) — used when no reliable TTC label
-  if (!fields['Prime Totale TTC'] || trappedTtc || !priceIsPlausible('Prime Totale TTC', toNum(fields['Prime Totale TTC']), fields)) {
+  if (force || !fields['Prime Totale TTC'] || trappedTtc || !priceIsPlausible('Prime Totale TTC', toNum(fields['Prime Totale TTC']), fields)) {
     fill('Prime Totale TTC', auComptantRe);
   }
   // Stage 3: nette & taxes with TTC as anchor
@@ -960,6 +962,27 @@ async function extractSingle(pdfData, fileName, category) {
       }
     } catch (err) {
       console.warn('Price recheck failed, keeping first-pass values:', err.message);
+    }
+  }
+
+  // Deterministic price fallback: when AI (first pass + recheck) still can't reconcile,
+  // force the regex layer to derive TTC/Nette/Taxes from the labeled amounts and keep the
+  // result only if it now reconciles. Free — no extra API request.
+  if (priceWarning && method === 'OpenRouter') {
+    const before = {
+      'Prime Totale TTC': fields['Prime Totale TTC'],
+      'Prime Nette': fields['Prime Nette'],
+      'Taxes': fields['Taxes']
+    };
+    fillPriceFields(fields, text, true);
+    if (checkPriceConsistency(fields, text)) {
+      validateAndFix(fields);
+      priceWarning = false;
+    } else {
+      // Revert to the AI values if the regex layer didn't reconcile either
+      fields['Prime Totale TTC'] = before['Prime Totale TTC'];
+      fields['Prime Nette'] = before['Prime Nette'];
+      fields['Taxes'] = before['Taxes'];
     }
   }
 
