@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.1] — 2026-08-17
+
+### Removed
+- **"Report issue" navbar button** and its pre-filled GitHub-issue handler (functionality not
+  required; button, dead JS listener, and README feature line removed).
+
 ## [1.9.0] — 2026-08-14
 
 ### Changed

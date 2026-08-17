@@ -19,7 +19,6 @@ Web-based insurance contract data extraction tool. Upload Moroccan insurance PDF
 - **Export to Excel/CSV** — Download visible columns only, plus per-record single-CSV export
 - **Dark Mode** — Toggle in navbar, persists across reload
 - **Persistent Storage** — Contracts in localStorage, PDF cache in IndexedDB (survives page reload)
-- **Report issue** — navbar button opens a GitHub issue pre-filled with the source file, category, extraction method, AI error, and fields
 
 ## How to run (local)
 
